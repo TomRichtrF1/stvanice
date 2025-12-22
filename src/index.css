@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slide-down {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+  }
+
+  .animate-slide-down {
+    animation: slide-down 0.3s ease-out;
+  }
+}
+
+/* Animace pro dveře */
+@keyframes slide-in-left {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes slide-in-right {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(0); }
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* --- STYLY PRO KONEC HRY (tlačítka) --- */
+
+/* Kontejner tlačítek - zarovnání pod sebe */
+.game-over-options {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px; 
+  margin-top: 30px;
+  width: 100%;
+}
+
+/* Hlavní styl tlačítek */
+.btn-endgame {
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  color: #fff;
+  padding: 12px 25px;
+  font-family: inherit; /* Převezme font stránky */
+  font-size: 1rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 260px;
+  text-align: center;
+}
+
+/* Efekt při najetí myší */
+.btn-endgame:hover {
+  background: #fff;
+  color: #8b0000; /* Tmavě rudá pro kontrast */
+  border-color: #fff;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+  transform: scale(1.05);
+}
+
+/* Tlačítko KONEC HRY - méně výrazné */
+.btn-endgame.secondary {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  background: transparent;
+  margin-top: 10px;
+}
+
+.btn-endgame.secondary:hover {
+  background: rgba(139, 0, 0, 0.3);
+  color: #ffcccc;
+  border-color: #ff4444;
+}
