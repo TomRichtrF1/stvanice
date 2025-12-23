@@ -7,136 +7,402 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// TVÁ OBŘÍ DATABÁZE TÉMAT
-const massiveTopics = [
-  "Sport a pohyb: Fotbal", "Sport a pohyb: Basketbal", "Sport a pohyb: Hokej", "Sport a pohyb: Tenis", "Sport a pohyb: Atletika", 
-  "Sport a pohyb: Plavání", "Sport a pohyb: Cyklistika", "Sport a pohyb: Box a bojové sporty", "Sport a pohyb: Zimní sporty (lyžování, snowboarding)", 
-  "Sport a pohyb: Motorsport (F1, MotoGP)", "Sport a pohyb: Gymnastika a akrobacie", "Sport a pohyb: Extrémní sporty",
-  "Přírodní vědy: Fyzika (mechanika, optika, elektřina)", "Přírodní vědy: Chemie (organická, anorganická)", "Přírodní vědy: Biologie (buněčná, molekulární)", 
-  "Přírodní vědy: Astronomie a kosmologie", "Přírodní vědy: Geologie a mineralogie", "Přírodní vědy: Meteorologie a klimatologie", 
-  "Přírodní vědy: Oceanografie", "Přírodní vědy: Ekologie a životní prostředí",
-  "Živá příroda: Zoologie savců", "Živá příroda: Ornitologie (ptáci)", "Živá příroda: Herpetologie (plazi a obojživelníci)", 
-  "Živá příroda: Entomologie (hmyz)", "Živá příroda: Mořská biologie", "Živá příroda: Botanika květin", "Živá příroda: Dendrologie (stromy)", 
-  "Živá příroda: Mykologie (houby)", "Živá příroda: Mikrobiologie",
-  "Zeměpis: Evropská geografie", "Zeměpis: Asijská geografie", "Zeměpis: Americká geografie (Severní i Jižní)", "Zeměpis: Africká geografie", 
-  "Zeměpis: Austrálie a Oceánie", "Zeměpis: Hlavní města světa", "Zeměpis: Řeky a jezera", "Zeměpis: Hory a pohoří", "Zeměpis: Ostrovy a poloostrovy", 
-  "Zeměpis: Pouště a biomy",
-  "Historie: Starověk (Egypt, Řecko, Řím)", "Historie: Středověk", "Historie: Renesance a osvícenství", "Historie: Průmyslová revoluce", 
-  "Historie: První světová válka", "Historie: Druhá světová válka", "Historie: Studená válka", "Historie: Starověké civilizace (Inkové, Mayové, Aztékové)", 
-  "Historie: České dějiny", "Historie: Antická mytologie",
-  "Technologie a věda: Informatika a programování", "Technologie a věda: Umělá inteligence", "Technologie a věda: Robotika", "Technologie a věda: Kosmonautika", 
-  "Technologie a věda: Medicína a anatomie", "Technologie a věda: Farmakologie", "Technologie a věda: Fyzikální objevy a vynálezy", 
-  "Technologie a věda: Chemické prvky a periodická tabulka", "Technologie a věda: Matematika (algebra, geometrie)", "Technologie a věda: Inženýrství a stavitelství",
-  "Doprava: Automobilový průmysl", "Doprava: Letectví", "Doprava: Lodní doprava", "Doprava: Železnice a vlaky", "Doprava: Historie dopravy", "Doprava: Vesmírné lety",
-  "Kultura a umění: Malířství (staří mistři, moderní umění)", "Kultura a umění: Sochařství", "Kultura a umění: Architektura (styly, slavné budovy)", 
-  "Kultura a umění: Literatura (světová, česká)", "Kultura a umění: Poezie", "Kultura a umění: Divadlo", "Kultura a umění: Film a kinematografie", 
-  "Kultura a umění: Hudba klasická", "Kultura a umění: Populární hudba (rock, pop, jazz)", "Kultura a umění: Hip hop a rap", "Kultura a umění: Elektronická hudba", 
-  "Kultura a umění: Fotografie",
-  "Gastronomie: Italská kuchyně", "Gastronomie: Francouzská kuchyně", "Gastronomie: Asijská kuchyně", "Gastronomie: Mexická kuchyně", "Gastronomie: Indická kuchyně", 
-  "Gastronomie: Středomořská kuchyně", "Gastronomie: Pečení a cukrářství", "Gastronomie: Víno a vinařství", "Gastronomie: Pivo a pivovarnictví", 
-  "Gastronomie: Koktejly a mixologie", "Gastronomie: Čaje a káva",
-  "Móda a životní styl: Historie módy", "Móda a životní styl: Módní návrháři", "Móda a životní styl: Textilní materiály", "Móda a životní styl: Šperky a hodinky",
-  "Zábava a popkultura: Videohry", "Zábava a popkultura: Komiksy a manga", "Zábava a popkultura: Televizní seriály", "Zábava a popkultura: Anime", 
-  "Zábava a popkultura: Streamovací platformy", "Zábava a popkultura: Internet a memes", "Zábava a popkultura: Sociální média",
-  "Filozofie a společnost: Psychologie", "Filozofie a společnost: Ekonomie", "Filozofie a společnost: Politické systémy", "Filozofie a společnost: Náboženství světa", 
-  "Filozofie a společnost: Mytologie (řecká, severská, egyptská)",
-  "Ostatní: Olympijské hry", "Ostatní: Nobel prize laureáti", "Ostatní: Světové rekordy", "Ostatní: UNESCO památky", "Ostatní: Slavné osobnosti",
-  "Věda a výzkum: Kvantová fyzika", "Věda a výzkum: Nanotechnologie", "Věda a výzkum: Genetika a DNA", "Věda a výzkum: Evoluce a Darwin", 
-  "Věda a výzkum: Archeologie", "Věda a výzkum: Paleontologie (dinosauři)", "Věda a výzkum: Kryptografie", "Věda a výzkum: Teorie chaosu", 
-  "Věda a výzkum: Jaderná fyzika",
-  "Příroda detailněji: Tropické deštné lesy", "Příroda detailněji: Savany a stepi", "Příroda detailněji: Sopky a vulkanismus", "Příroda detailněji: Zemětřesení", 
-  "Příroda detailněji: Ledovce a polární oblasti", "Příroda detailněji: Národní parky světa", "Příroda detailněji: Zvířata Austrálie",
-  "Historie detailněji: Vikingové", "Historie detailněji: Japonští samurajové", "Historie detailněji: Rytíři a křížové výpravy", "Historie detailněji: Piráti a korzáři", 
-  "Historie detailněji: Divný Západ USA", "Historie detailněji: Byzantská říše", "Historie detailněji: Osmanská říše", "Historie detailněji: Čínské dynastie", 
-  "Historie detailněji: Faraoni a mumie", "Historie detailněji: Titanic a slavné lodě",
-  "Technologie a vynálezy: Historie internetu", "Technologie a vynálezy: Vývoj telefonů", "Technologie a vynálezy: Počítačové hry (historie)", 
-  "Technologie a vynálezy: 3D tisk", "Technologie a vynálezy: Drony", "Technologie a vynálezy: Elektromobily", "Technologie a vynálezy: Obnovitelné zdroje energie",
-  "Kultura a tradice: Světové festivaly", "Kultura a tradice: Africká kultura", "Kultura a tradice: Domorodé kmeny", "Kultura a tradice: Tetování a body art", 
-  "Kultura a tradice: Graffiti a street art", "Kultura a tradice: Origami",
-  "Hudební žánry: Metal", "Hudební žánry: Punk rock", "Hudební žánry: Folk a world music", "Hudební žánry: Opera a muzikály", "Hudební žánry: Slavné koncerty",
-  "Literatura: Sci-fi", "Literatura: Fantasy", "Literatura: Detektivky", "Literatura: Horory", "Literatura: Komiksová literatura",
-  "Tajemno: Kryptozoologie (Yeti, Loch Ness)", "Tajemno: UFO a mimozemšťané", "Tajemno: Konspirace", "Tajemno: Paranormální jevy", "Tajemno: Magie a iluze",
-  "Zvířata specificky: Šelmy a predátoři", "Zvířata specificky: Primáti", "Zvířata specificky: Domácí mazlíčci", "Zvířata specificky: Vymřelá zvířata", 
-  "Zvířata specificky: Jedovatá zvířata",
-  "Prostor kolem nás: Černé díry", "Prostor kolem nás: Planety sluneční soustavy", "Prostor kolem nás: Měsíce planet", "Prostor kolem nás: Hvězdy a souhvězdí", 
-  "Prostor kolem nás: Meteority a komety", "Prostor kolem nás: Exoplanety", "Prostor kolem nás: Vesmírné mise"
+// === 🧠 PAMĚŤ NEDÁVNÝCH OTÁZEK (Anti-repeat) ===
+const recentQuestions = [];
+const recentEntities = []; // Nová paměť pro jména, osoby, místa
+const MAX_HISTORY = 50; // Zvýšeno z 30 na 50
+const MAX_ENTITY_HISTORY = 100; // Pamatuj si 100 entit
+
+function addToHistory(question) {
+  recentQuestions.push(question.toLowerCase());
+  if (recentQuestions.length > MAX_HISTORY) {
+    recentQuestions.shift(); // Odstraň nejstarší
+  }
+  
+  // === 🆕 EXTRAHUJ A PAMATUJ SI ENTITY (jména, místa) ===
+  // Hledáme slova začínající velkým písmenem (pravděpodobně jména)
+  const entities = question.match(/\b[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+(?:\s+[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+)*/g);
+  
+  if (entities) {
+    entities.forEach(entity => {
+      const lowerEntity = entity.toLowerCase();
+      recentEntities.push(lowerEntity);
+      if (recentEntities.length > MAX_ENTITY_HISTORY) {
+        recentEntities.shift();
+      }
+    });
+  }
+}
+
+function isQuestionUnique(question) {
+  const lowerQuestion = question.toLowerCase();
+  
+  // 1. Kontrola přesné shody
+  if (recentQuestions.includes(lowerQuestion)) {
+    console.log("⚠️ DUPLICITA: Přesná shoda s historií!");
+    return false;
+  }
+  
+  // 2. 🆕 KONTROLA OPAKOVANÝCH ENTIT (jména, osoby)
+  const entities = question.match(/\b[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+(?:\s+[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+)*/g);
+  
+  if (entities) {
+    for (const entity of entities) {
+      const lowerEntity = entity.toLowerCase();
+      // Počítáme kolikrát se entita objevila
+      const entityCount = recentEntities.filter(e => e === lowerEntity).length;
+      
+      if (entityCount >= 2) { // Pokud entita už byla 2x a víc, odmítni
+        console.log(`⚠️ DUPLICITA ENTITY: "${entity}" se již objevil ${entityCount}x!`);
+        return false;
+      }
+    }
+  }
+  
+  // 3. Kontrola podobnosti (klíčová slova)
+  for (const oldQ of recentQuestions) {
+    const similarity = calculateSimilarity(lowerQuestion, oldQ);
+    if (similarity > 0.7) { // 70% podobnost = duplicita
+      console.log(`⚠️ DUPLICITA: ${(similarity * 100).toFixed(0)}% podobnost s předchozí otázkou!`);
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+function calculateSimilarity(str1, str2) {
+  const words1 = new Set(str1.split(/\s+/).filter(w => w.length > 3));
+  const words2 = new Set(str2.split(/\s+/).filter(w => w.length > 3));
+  
+  if (words1.size === 0 || words2.size === 0) return 0;
+  
+  const intersection = new Set([...words1].filter(x => words2.has(x)));
+  return intersection.size / Math.max(words1.size, words2.size);
+}
+
+// === 🎲 VYLEPŠENÁ DATABÁZE TÉMAT S VÁHAMI ===
+const weightedTopics = [
+  // SPORT (vysoká váha - populární)
+  ["Sport: Fotbal", 8],
+  ["Sport: Hokej", 6],
+  ["Sport: Basketbal", 6],
+  ["Sport: Tenis", 5],
+  ["Sport: Atletika", 4],
+  ["Sport: Zimní olympijské sporty", 4],
+  ["Sport: Motorsport (F1, MotoGP)", 3],
+  ["Sport: Box a bojové sporty", 3],
+  
+  // PŘÍRODA & ZVÍŘATA (střední-vysoká váha)
+  ["Zvířata: Savci", 6],
+  ["Zvířata: Ptáci", 4],
+  ["Zvířata: Mořský svět", 5],
+  ["Zvířata: Dinosauři a vymřelá zvířata", 6],
+  ["Zvířata: Domácí mazlíčci", 5],
+  ["Příroda: Tropické deštné lesy", 3],
+  ["Příroda: Savany a pouště", 3],
+  ["Příroda: Hory a sopky", 4],
+  ["Příroda: Oceány a moře", 4],
+  
+  // ZEMĚPIS (vysoká váha - populární)
+  ["Zeměpis: Evropa", 7],
+  ["Zeměpis: Asie", 5],
+  ["Zeměpis: Amerika", 5],
+  ["Zeměpis: Afrika", 4],
+  ["Zeměpis: Hlavní města světa", 7],
+  ["Zeměpis: Řeky a jezera", 4],
+  ["Zeměpis: Hory a pohoří", 4],
+  
+  // HISTORIE (střední váha)
+  ["Historie: Starověk (Egypt, Řím, Řecko)", 5],
+  ["Historie: Středověk a rytíři", 5],
+  ["Historie: Vikingové", 4],
+  ["Historie: Piráti", 5],
+  ["Historie: Druhá světová válka", 4],
+  ["Historie: České dějiny", 6],
+  ["Historie: Starověké civilizace (Mayové, Aztékové)", 3],
+  ["Historie: Titanic a slavné lodě", 4],
+  
+  // FILM & ZÁBAVA (velmi vysoká váha - populární!)
+  ["Film: Disney a Pixar filmy", 8],
+  ["Film: Slavné filmy a seriály", 7],
+  ["Popkultura: Videohry", 6],
+  ["Popkultura: Komiksy a superhrdiny", 6],
+  ["Popkultura: YouTube a internet", 5],
+  ["Popkultura: Anime a manga", 4],
+  
+  // HUDBA (střední-vysoká váha)
+  ["Hudba: Rock a pop", 6],
+  ["Hudba: Hip hop a rap", 4],
+  ["Hudba: Klasická hudba", 3],
+  ["Hudba: Slavné kapely a zpěváci", 6],
+  ["Hudba: Hudební nástroje", 4],
+  
+  // VĚDA (střední váha)
+  ["Vesmír: Planety sluneční soustavy", 6],
+  ["Vesmír: Hvězdy a galaxie", 4],
+  ["Vesmír: Kosmonautika", 5],
+  ["Fyzika: Základní principy", 3],
+  ["Chemie: Chemické prvky", 3],
+  ["Biologie: Lidské tělo", 5],
+  ["Technologie: Historie internetu", 4],
+  ["Technologie: Umělá inteligence", 4],
+  ["Technologie: Mobilní telefony", 5],
+  
+  // GASTRONOMIE (střední váha)
+  ["Gastronomie: Italská kuchyně", 5],
+  ["Gastronomie: Asijská kuchyně", 4],
+  ["Gastronomie: Fast food", 5],
+  ["Gastronomie: Sladkosti a čokoláda", 6],
+  ["Gastronomie: Pivo a víno", 4],
+  
+  // UMĚNÍ & KULTURA (nižší váha)
+  ["Umění: Slavní malíři", 3],
+  ["Umění: Architektura", 3],
+  ["Literatura: Slavné knihy", 4],
+  ["Literatura: Pohádky", 5],
+  
+  // DOPRAVA (střední váha)
+  ["Doprava: Auta a automobilky", 5],
+  ["Doprava: Letadla", 4],
+  ["Doprava: Vlaky", 3],
+  ["Doprava: Lodě", 3],
+  
+  // ZAJÍMAVOSTI (střední váha)
+  ["Mytologie: Řecká mytologie", 5],
+  ["Mytologie: Severská mytologie", 4],
+  ["Rekórdy: Guinness World Records", 5],
+  ["UNESCO: Světové památky", 3],
+  ["Olympiáda: Olympijské hry", 4],
 ];
 
-const fallbackQuestions = [
-  { question: 'Jaké je hlavní město ČR?', options: ['Brno', 'Praha', 'Ostrava'], correct: 1 }
-];
+// === 🎰 FUNKCE PRO VÁŽENÝ NÁHODNÝ VÝBĚR ===
+function selectWeightedTopic() {
+  const totalWeight = weightedTopics.reduce((sum, [_, weight]) => sum + weight, 0);
+  let random = Math.random() * totalWeight;
+  
+  for (const [topic, weight] of weightedTopics) {
+    random -= weight;
+    if (random <= 0) {
+      return topic;
+    }
+  }
+  
+  return weightedTopics[0][0];
+}
 
-export async function generateQuestion(topic = 'general', mode = 'adult') {
+// === 🛡️ VALIDACE ANTI-SPOILER ===
+function containsSpoiler(question, options) {
+  const lowerQuestion = question.toLowerCase();
+  
+  for (const option of options) {
+    const lowerOption = option.toLowerCase();
+    const words = lowerOption.split(/\s+/);
+    
+    for (const word of words) {
+      if (word.length > 4 && lowerQuestion.includes(word)) {
+        console.log(`⚠️ SPOILER DETECTED: "${word}" v otázce!`);
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
+// === 🎯 FALLBACK OTÁZKY ===
+const fallbackQuestions = {
+  adult: [
+    { 
+      question: 'Který prvek má chemickou značku "Au"?', 
+      options: ['Stříbro', 'Zlato', 'Měď'], 
+      correct: 1 
+    },
+    { 
+      question: 'Ve kterém roce padla Berlínská zeď?', 
+      options: ['1987', '1989', '1991'], 
+      correct: 1 
+    },
+  ],
+  kid: [
+    { 
+      question: 'Jakou barvu má slunce?', 
+      options: ['Modrou', 'Žlutou', 'Zelenou'], 
+      correct: 1 
+    },
+  ]
+};
+
+// === 🚀 HLAVNÍ GENERÁTOR OTÁZEK ===
+export async function generateQuestion(topic = 'general', mode = 'adult', maxRetries = 5) {
   
   let selectedTopic = topic;
   
   if (topic === 'general') {
-    selectedTopic = massiveTopics[Math.floor(Math.random() * massiveTopics.length)];
-    console.log(`🎲 Losuji téma ze seznamu: "${selectedTopic}"`);
+    selectedTopic = selectWeightedTopic();
+    console.log(`🎲 Vážený výběr tématu: "${selectedTopic}"`);
   } else {
     console.log(`🎯 Uživatelské téma: "${selectedTopic}"`);
   }
 
-  // === UPRAVENÁ LOGIKA OBTÍŽNOSTI ===
+  // === 🎭 PERSONA A PROMPT PODLE REŽIMU ===
   let systemPersona = "";
+  let userPrompt = "";
+  
   if (mode === 'kid') {
-    console.log("👶 Režim: JUNIOR (Zjednodušený 6-12 let)");
-    systemPersona = `
-      Jsi milý průvodce světem pro děti (věk 6-12 let).
-      Téma otázky: "${selectedTopic}".
-      
-      Pravidla pro děti:
-      1. Otázky musí být HRAVÉ a JEDNODUCHÉ. 
-      2. VYHNI SE LETOPOČTŮM a složitým historickým datům.
-      3. Pokud je téma složité (např. 'Fyzika'), zeptej se na úplný základ (např. 'Proč padá míč dolů?').
-      4. Používej příklady z pohádek, filmů pro děti (Disney, Pixar) nebo věcí, co znají ze školy (prvouka).
-      5. Jazyk musí být velmi srozumitelný. Žádná cizí slova.
-    `;
+    console.log("👶 Režim: JUNIOR (6-12 let)");
+    
+    systemPersona = `Jsi zkušený tvůrce vzdělávacích her pro děti ve věku 6-12 let.
+Tvoje otázky jsou:
+- ZÁBAVNÉ a SROZUMITELNÉ
+- Bez složitých pojmů a cizích slov
+- Bez letopočtů (místo "v roce 1969" řekni "před dávnou dobou")
+- Používají příklady z dětského světa (pohádky, Disney, zvířata, hry)
+
+KRITICKÉ PRAVIDLO: V otázce NIKDY nezmiňuj slova, která jsou v odpovědích!`;
+
+    userPrompt = `Téma: "${selectedTopic}"
+
+Vytvoř JEDNU UNIKÁTNÍ kvízovou otázku pro děti (6-12 let).
+
+⚠️ DŮLEŽITÉ: Buď KREATIVNÍ! Každá otázka musí být JINÁ než všechny předchozí.
+Vyhni se klišé jako "Jaká je největší/nejmenší/nejrychlejší...".
+
+PŘÍKLADY DOBRÝCH OTÁZEK:
+- "Co používají medvědi k chytání ryb v řece?"
+- "Ve kterém filmu pes pomáhá zachránit dalmatiny?"
+- "Kolik nohou má pavouk?"
+
+ZAKÁZANÉ FORMULACE:
+❌ "Jaké zvíře, například klokan..." (prozrazuje odpověď!)
+❌ "Která země v Evropě..." pokud je "Francie" odpověď
+❌ Opakující se vzorce otázek
+
+Formát odpovědi (POUZE JSON):
+{
+  "question": "Kreativní otázka pro děti",
+  "options": ["Odpověď A", "Odpověď B", "Odpověď C"],
+  "correct": 0
+}`;
+
   } else {
-    console.log("👨‍🦳 Režim: DOSPĚLÝ (Standard)");
-    systemPersona = `
-      Jsi moderátor zábavného pub kvízu pro dospělé.
-      Téma: "${selectedTopic}".
-      
-      Pravidla pro dospělé:
-      1. Obtížnost: Zlatý střed. Nechceme akademické znalosti, ale všeobecný přehled.
-      2. Otázka by měla být zajímavá ("fun fact"), ne jen suchá data.
-      3. Vyhni se extrémně specifickým otázkám (např. přesné datum narození méně známé osoby).
-      4. Buď vtipný a kreativní.
-    `;
+    console.log("👨‍🦳 Režim: DOSPĚLÝ");
+    
+    systemPersona = `Jsi profesionální autor otázek pro náročné pub kvízy.
+
+POŽADOVANÁ OBTÍŽNOST: STŘEDNÍ až TĚŽŠÍ
+- Ne "Jaké je hlavní město Francie?" (příliš lehké)
+- Ano "Ve kterém městě se nachází slavná opera La Scala?" (vyžaduje znalost)
+- Ano "Který fotbalista získal Zlatý míč v roce 2018?" (konkrétní)
+
+Tvoje otázky musí:
+1. Testovat SKUTEČNÉ znalosti, ne jen hádat
+2. Být SPECIFICKÉ (přesný rok, jméno, místo)
+3. Obsahovat "fun facts" nebo překvapivé souvislosti
+4. Vyžadovat zamyšlení, ne intuici
+
+KRITICKÉ PRAVIDLO: Každá otázka musí být UNIKÁTNÍ! Vyhni se opakování.`;
+
+    userPrompt = `Téma: "${selectedTopic}"
+
+Vytvoř JEDNU NÁROČNOU kvízovou otázku pro dospělé.
+
+⚠️ KREATIVITA: Vyhni se běžným otázkám! Buď originální a překvapivý.
+
+PŘÍKLADY KVALITNÍCH OBTÍŽNÝCH OTÁZEK:
+✅ "Který fotbalista je jediný, kdo vyhrál Zlatý míč i jako obránce?"
+✅ "Jaký film se stal první animovanou snímkem nominovaným na Oscara za nejlepší film?"
+✅ "Kolik titulů mistra světa vyhrál Michael Schumacher?"
+✅ "Ve kterém roce byla založena sociální síť Facebook?"
+
+ŠPATNÉ OTÁZKY (příliš lehké):
+❌ "Kdo vyhrál MS ve fotbale 2022?" (nedávná událost)
+❌ "Jaké je hlavní město Německa?" (základní znalost)
+❌ "Který sport se hraje s oranžovým míčem?" (příliš triviální)
+
+ZAKÁZANÉ:
+- Otázky s odpovědí delší než 5 slov
+- Otázky prozrazující odpověď
+- Opakující se vzorce
+
+Formát (POUZE JSON):
+{
+  "question": "Náročná originální otázka",
+  "options": ["Odpověď A", "Odpověď B", "Odpověď C"],
+  "correct": 1
+}`;
   }
 
-  try {
-    const prompt = `
-      ${systemPersona}
+  // === 🔄 RETRY LOOP S ANTI-REPEAT ===
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Pokus ${attempt}/${maxRetries}...`);
       
-      Vytvoř jednu kvízovou otázku.
-      Musí mít 3 možnosti odpovědi, jen jedna je správná.
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPersona },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 1.2, // 🔥 ZVÝŠENÁ KREATIVITA (bylo 1.0)
+        presence_penalty: 0.7, // 🆕 Penalizace opakování
+        frequency_penalty: 0.7, // 🆕 Penalizace častých slov
+        max_tokens: 300,
+      });
+
+      let rawContent = response.choices[0].message.content;
+      rawContent = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
+
+      const parsed = JSON.parse(rawContent);
       
-      Odpověz POUZE validním JSON objektem:
-      {
-        "question": "Text otázky",
-        "options": ["Možnost A", "Možnost B", "Možnost C"],
-        "correct": 0 (index 0-2)
+      // === ✅ VALIDACE ===
+      if (!parsed.question || !parsed.options || parsed.options.length !== 3) {
+        throw new Error("Neplatná struktura JSON");
       }
-    `;
+      
+      // 🆕 Anti-repeat check
+      if (!isQuestionUnique(parsed.question)) {
+        console.log("⚠️ Otázka je příliš podobná předchozí, zkouším znovu...");
+        continue;
+      }
+      
+      // Anti-spoiler check
+      if (containsSpoiler(parsed.question, parsed.options)) {
+        console.log("⚠️ Otázka prozrazuje odpověď, zkouším znovu...");
+        continue;
+      }
+      
+      // Kontrola délky odpovědí
+      const tooLongOptions = parsed.options.filter(opt => opt.split(' ').length > 5);
+      if (tooLongOptions.length > 0) {
+        console.log("⚠️ Příliš dlouhé odpovědi, zkouším znovu...");
+        continue;
+      }
+      
+      // 🆕 Přidej do historie
+      addToHistory(parsed.question);
+      
+      console.log("✅ Otázka vygenerována úspěšně!");
+      return parsed;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "Jsi JSON generátor. Vracíš pouze čistý JSON." },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.9, 
-    });
-
-    let rawContent = response.choices[0].message.content;
-    rawContent = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
-
-    return JSON.parse(rawContent);
-
-  } catch (error) {
-    console.error("❌ Chyba AI:", error.message);
-    return fallbackQuestions[0];
+    } catch (error) {
+      console.error(`❌ Pokus ${attempt} selhal:`, error.message);
+      
+      if (attempt === maxRetries) {
+        console.log("🆘 Všechny pokusy selhaly, používám fallback...");
+        const fallbacks = mode === 'kid' ? fallbackQuestions.kid : fallbackQuestions.adult;
+        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+      }
+    }
   }
+}
+
+// 🆕 Export pro testing
+export function clearHistory() {
+  recentQuestions.length = 0;
+  console.log("🧹 Historie otázek vymazána");
+}
+
+export function getHistorySize() {
+  return recentQuestions.length;
 }

@@ -130,7 +130,7 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
       
       {/* Footer */}
       <div className="absolute bottom-6 text-slate-600 text-xs font-mono opacity-50 hover:opacity-100 transition-opacity">
-        ŠTVANICE v1.0 • Multiplayer Quiz Game
+        ŠTVANICE ONLINE (beta) • Kvízová hra pro dva
       </div>
     </div>
   );

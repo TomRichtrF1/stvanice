@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Target, User, CheckCircle, XCircle, Clock, Play, Baby, Brain } from 'lucide-react';
+import { Target, User, CheckCircle, XCircle, Clock, Play, Baby, Brain, Skull, Flag } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useGameAudio } from '../hooks/useGameAudio';
 import GameEndOverlay from './GameEndOverlay';
@@ -42,9 +42,19 @@ export default function GameBoard({
   onRestart,
   gameMode
 }: GameBoardProps) {
+  
   const { socket } = useSocket();
   const { playSfx, playTickTack, stopTickTack } = useGameAudio();
   
+  // Získání aktuálních pozic ze serveru (okamžité)
+  const serverHunterPos = players.find(p => p.role === 'hunter')?.position || 0;
+  const serverPreyPos = players.find(p => p.role === 'prey')?.position || 0;
+
+  // == LOKÁLNÍ STAV PRO VIZUÁLNÍ POZICE (ZPOŽDĚNÉ) ==
+  // Figurky na mapě se budou řídit tímto, ne přímo props
+  const [visualHunterPos, setVisualHunterPos] = useState(serverHunterPos);
+  const [visualPreyPos, setVisualPreyPos] = useState(serverPreyPos);
+
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isReady, setIsReady] = useState(false);
@@ -55,33 +65,59 @@ export default function GameBoard({
   const lastPreyPos = useRef<number>(-1);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // === AUDIO LOGIKA (Zůstává stejná) ===
+  // === 1. SYNCHRONIZACE POZIC S EFEKTEM ZPOŽDĚNÍ ===
+  useEffect(() => {
+    // Pokud máme výsledek kola (právě proběhlo vyhodnocení), zpozdíme pohyb o 2 sekundy
+    if (roundResult) {
+      const timer = setTimeout(() => {
+        setVisualHunterPos(serverHunterPos);
+        setVisualPreyPos(serverPreyPos);
+      }, 2000); // 2000ms = 2 sekundy zpoždění pohybu po vyhodnocení
+      return () => clearTimeout(timer);
+    } else {
+      // V jiných případech (start hry, reconnect) synchronizujeme hned
+      setVisualHunterPos(serverHunterPos);
+      setVisualPreyPos(serverPreyPos);
+    }
+  }, [serverHunterPos, serverPreyPos, roundResult]);
+
+  // === 2. AUDIO EFEKTY POHYBU ===
+  // Přehráváme zvuky až ve chvíli, kdy se "vizuálně" pohne figurka
+  useEffect(() => {
+    // 🆕 STEP ZVUK - při jakémkoliv pohybu
+    const hunterMoved = visualHunterPos !== lastHunterPos.current && lastHunterPos.current !== -1;
+    const preyMoved = visualPreyPos !== lastPreyPos.current && lastPreyPos.current !== -1;
+    
+    if (hunterMoved || preyMoved) {
+      playSfx('step.mp3');
+    }
+    
+    // Detekce pohybu lovce (nebezpečí) - přehraje se PO step.mp3
+    if (visualHunterPos === visualPreyPos - 1 && visualHunterPos !== lastHunterPos.current && visualHunterPos > 0) {
+        // Malé zpoždění aby se step.mp3 stihl přehrát první
+        setTimeout(() => playSfx('danger.mp3'), 300);
+    }
+    // Detekce blížícího se cíle pro štvance
+    if (visualPreyPos === 7 && visualPreyPos !== lastPreyPos.current) {
+          setTimeout(() => playSfx('hope.mp3'), 300);
+    }
+    
+    // Aktualizace referencí pro příští porovnání
+    lastHunterPos.current = visualHunterPos;
+    lastPreyPos.current = visualPreyPos;
+  }, [visualHunterPos, visualPreyPos, playSfx]);
+
+  // === OSTATNÍ LOGIKA (Audio tick-tack, GameOver atd.) ===
   useEffect(() => {
     if (currentQuestion && !hasAnswered && !roundResult && !gameOver && timeLeft > 0 && timeLeft <= 10) {
       const timeoutId = setTimeout(() => {
-         playTickTack();
+          playTickTack();
       }, 500); 
       return () => clearTimeout(timeoutId);
     } else {
       stopTickTack();
     }
   }, [currentQuestion, hasAnswered, roundResult, gameOver, timeLeft, playTickTack, stopTickTack]);
-
-  useEffect(() => {
-    const hunter = players.find(p => p.role === 'hunter');
-    const prey = players.find(p => p.role === 'prey');
-
-    if (hunter && prey) {
-        if (hunter.position === prey.position - 1 && hunter.position !== lastHunterPos.current && hunter.position > 0) {
-            playSfx('danger.mp3');
-        }
-        if (prey.position === 7 && prey.position !== lastPreyPos.current) {
-             playSfx('hope.mp3');
-        }
-        lastHunterPos.current = hunter.position;
-        lastPreyPos.current = prey.position;
-    }
-  }, [players, playSfx]);
 
   useEffect(() => {
     if (gameOver && winner) {
@@ -91,7 +127,6 @@ export default function GameBoard({
     }
   }, [gameOver, winner, playSfx, stopTickTack]);
 
-  // === LOGIKA TIMERU (Zůstává stejná) ===
   useEffect(() => {
     if (currentQuestion && !hasAnswered && !gameOver && !roundResult) {
       setTimeLeft(20);
@@ -152,182 +187,192 @@ export default function GameBoard({
 
   if (gameOver && winner) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col items-center justify-center p-4 overflow-hidden">
+      <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-4">
         <GameEndOverlay winner={winner} myRole={myRole} onRestart={onRestart} />
       </div>
     );
   }
 
+  // === DESIGN (BEZE ZMĚN) ===
   return (
-    // HLAVNÍ KONTEJNER
-    // Na mobilu je to sloupec (flex-col), zarovnaný na střed.
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4 py-8 flex flex-col items-center relative">
+    <div className="fixed inset-0 w-full h-[100dvh] bg-slate-900 flex flex-col text-slate-200 font-sans overflow-hidden">
       
-      {/* OBSAHOVÝ KONTEJNER - TADY SE DĚJE MAGIE */}
-      {/* Na mobilu: max-w-md (úzký), flex-col (pod sebou), gap-6 */}
-      {/* Na desktopu (md:): max-w-6xl (široký), flex-row (vedle sebe), gap-8, items-start (zarovnat nahoru) */}
-      <div className="w-full max-w-md md:max-w-6xl mx-auto flex flex-col md:flex-row gap-6 md:gap-8 md:items-start flex-1 justify-center z-10">
-
-        {/* === LEVÝ SLOUPEC (Header + Mapa) === */}
-        {/* Na desktopu má fixní šířku 400px a nesmrskne se (flex-shrink-0) */}
-        <div className="w-full md:w-[400px] space-y-6 flex-shrink-0">
-            {/* HEADER */}
-            <div className={`w-full p-6 rounded-2xl shadow-xl flex items-center justify-center gap-5 border-2 transition-all duration-500 transform hover:scale-[1.02] ${
-                myRole === 'hunter' 
-                ? 'bg-gradient-to-r from-red-900/90 to-red-600/90 border-red-500 text-white shadow-red-900/50' 
-                : 'bg-gradient-to-r from-green-900/90 to-green-600/90 border-green-500 text-white shadow-green-900/50'
+      {/* HEADER */}
+      <div className={`shrink-0 h-10 md:h-16 flex items-center justify-between px-3 md:px-6 border-b border-white/10 shadow-sm z-20 ${
+          myRole === 'hunter' ? 'bg-red-950' : 'bg-green-950'
+      }`}>
+         <div className="flex items-center gap-2 md:gap-4">
+            <span className="text-lg md:text-3xl filter drop-shadow">{myRole === 'hunter' ? '👹' : '🏃'}</span>
+            <span className={`font-black text-xs md:text-xl uppercase tracking-widest ${
+                 myRole === 'hunter' ? 'text-red-400' : 'text-green-400'
             }`}>
-                <span className="text-5xl filter drop-shadow-lg">{myRole === 'hunter' ? '👹' : '🏃'}</span>
-                <div className="flex flex-col items-start">
-                    <h2 className="text-3xl font-black tracking-widest uppercase drop-shadow-md leading-none">
-                        {myRole === 'hunter' ? 'JSI LOVEC' : 'JSI ŠTVANEC'}
-                    </h2>
-                    <span className={`text-sm font-bold tracking-[0.3em] uppercase opacity-90 mt-1 ${
-                        myRole === 'hunter' ? 'text-red-200' : 'text-green-200'
-                    }`}>
-                        {myRole === 'hunter' ? 'Nemá šanci utéct' : 'Běž o život'}
-                    </span>
-                </div>
-            </div>
+              {myRole === 'hunter' ? 'LOVEC' : 'ŠTVANEC'}
+            </span>
+         </div>
+         <div className="flex items-center gap-1.5 opacity-60 bg-black/20 px-2 py-0.5 md:px-4 md:py-1.5 rounded-full">
+            {gameMode === 'kid' ? <Baby size={12} className="md:w-5 md:h-5"/> : <Brain size={12} className="md:w-5 md:h-5"/>}
+            <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider">
+                {gameMode === 'kid' ? 'REŽIM JUNIOR' : 'REŽIM DOSPĚLÝ'}
+            </span>
+         </div>
+      </div>
 
-            {/* MAPA */}
-            <div className="bg-slate-800 rounded-2xl p-6 border-2 border-slate-700 space-y-3 shadow-2xl">
+      {/* HLAVNÍ KONTEJNER */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+
+        {/* === MAPA === */}
+        <div className="flex-1 overflow-y-auto bg-slate-900 min-h-0 p-2 md:p-8 relative [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+            
+            <div className="max-w-xl mx-auto space-y-1.5 md:space-y-4 pb-2">
                 {fields.map((fieldNum) => {
-                const isHunterHere = hunter?.position === fieldNum;
-                const isPreyHere = prey?.position === fieldNum;
+                // ZDE JSME POUŽILI VIZUÁLNÍ (ZPOŽDĚNÉ) POZICE
+                const isHunterHere = visualHunterPos === fieldNum;
+                const isPreyHere = visualPreyPos === fieldNum;
                 const isStart = fieldNum === 0;
                 const isFinish = fieldNum === 8;
-                const isHunterTrail = hunter?.position && fieldNum < hunter.position && fieldNum > 0;
-                const isPreyPath = prey?.position && fieldNum > prey.position && fieldNum < 8;
+                
+                // Určení, zda je pole na trase (pro barvení historie)
+                // Používáme také vizuální pozice, aby se "had" táhl správně
+                const isHunterTrail = visualHunterPos > 0 && fieldNum < visualHunterPos && fieldNum > 0;
+                const isPreyPath = visualPreyPos > 0 && fieldNum > visualPreyPos && fieldNum < 8;
 
-                let bgStyle = 'bg-slate-700 border-slate-600'; 
-                if (isStart) bgStyle = 'bg-red-900/30 border-red-600';
-                else if (isFinish) bgStyle = 'bg-green-900/30 border-green-600';
-                else if (isHunterTrail) bgStyle = 'bg-red-600/40 border-red-500 shadow-[inset_0_0_15px_rgba(220,38,38,0.4)]';
-                else if (isPreyPath) bgStyle = 'bg-green-600/40 border-green-500 shadow-[inset_0_0_15px_rgba(34,197,94,0.4)]';
+                let bgStyle = 'bg-slate-800/60 border-slate-700/50'; 
+                if (isStart) bgStyle = 'bg-red-500/10 border-red-500/20';
+                else if (isFinish) bgStyle = 'bg-green-500/10 border-green-500/20';
+                
+                if (isHunterTrail) bgStyle = 'bg-red-900/20 border-red-800/30'; // Stopa lovce
+                if (isHunterHere) bgStyle = 'bg-gradient-to-r from-red-900/50 to-slate-800 border-red-500/40';
+                
+                if (isPreyPath) bgStyle = 'bg-green-900/20 border-green-800/30'; // Cesta štvance
+                if (isPreyHere) bgStyle = 'bg-gradient-to-r from-green-900/50 to-slate-800 border-green-500/40';
 
                 return (
-                    <div key={fieldNum} className={`relative p-4 rounded-xl border-2 transition-all duration-500 ${bgStyle}`}>
-                    <div className="flex items-center justify-between">
-                        <span className={`font-mono font-bold transition-colors duration-500 ${isHunterTrail || isPreyPath ? 'text-white' : 'text-slate-400'}`}>
-                            {isStart ? 'START' : isFinish ? 'CÍL' : `${fieldNum}`}
+                    <div key={fieldNum} className={`relative px-4 rounded-xl border transition-all duration-300 flex items-center justify-between ${bgStyle} 
+                        min-h-[3rem] md:min-h-[5rem] py-2
+                    `}>
+                        <span className={`font-mono font-bold text-sm md:text-2xl ${
+                            isStart ? 'text-red-500 tracking-widest' : isFinish ? 'text-green-500 tracking-widest' : 'text-slate-500'
+                        }`}>
+                            {isStart ? 'START' : isFinish ? 'CÍL' : fieldNum}
                         </span>
-                        <div className="flex gap-2 z-10 relative">
-                        {isHunterHere && <div className="bg-red-600 px-3 py-1 rounded-lg text-white font-bold text-sm flex items-center gap-1 animate-bounce shadow-lg shadow-red-500/50"><Target size={16} /> 👹</div>}
-                        {isPreyHere && <div className="bg-green-600 px-3 py-1 rounded-lg text-white font-bold text-sm flex items-center gap-1 animate-bounce shadow-lg shadow-green-500/50"><User size={16} /> 🏃</div>}
+                        
+                        <div className="flex gap-2">
+                            {isHunterHere && (
+                                <div className="flex items-center gap-1.5 bg-red-600 text-white px-2 py-1 md:px-4 md:py-2 rounded-lg shadow-lg animate-bounce z-10 transition-all duration-500">
+                                    <Skull size={14} className="md:w-6 md:h-6" />
+                                    <span className="text-[10px] md:text-sm font-bold uppercase">Lovec</span>
+                                </div>
+                            )}
+                            {isPreyHere && (
+                                <div className="flex items-center gap-1.5 bg-green-600 text-white px-2 py-1 md:px-4 md:py-2 rounded-lg shadow-lg animate-pulse z-10 transition-all duration-500">
+                                    <User size={14} className="md:w-6 md:h-6"/>
+                                    <span className="text-[10px] md:text-sm font-bold uppercase">Štvanec</span>
+                                </div>
+                            )}
+                             {isFinish && !isPreyHere && <Flag className="text-slate-700 w-4 h-4 md:w-6 md:h-6"/>}
                         </div>
-                    </div>
                     </div>
                 );
                 })}
             </div>
         </div>
 
-        {/* === PRAVÝ SLOUPEC (Otázka / Start) === */}
-        {/* Na desktopu zabere zbývající místo (flex-1) */}
-        <div className="w-full flex-1">
-            {/* START BUTTON */}
-            {!currentQuestion && !gameOver && (
-            <div className="bg-slate-800 rounded-2xl p-8 border-2 border-cyan-500/50 space-y-4 animate-fade-in shadow-2xl text-center md:mt-0">
-                <h3 className="text-white text-2xl font-bold mb-6">PŘIPRAVENI KE HŘE?</h3>
-                <div className="flex justify-center">
-                    <button 
-                    onClick={handleReadyClick}
-                    disabled={isReady}
-                    className={`w-full py-8 rounded-xl font-black text-3xl uppercase tracking-widest transition-all transform flex items-center justify-center gap-4 ${
-                        isReady 
-                        ? 'bg-slate-600 text-slate-400 cursor-wait' 
-                        : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white hover:scale-105 shadow-lg shadow-green-500/30'
-                    }`}
-                    >
-                    {isReady ? 'ČEKÁM NA SOUPEŘE...' : <><Play size={36} fill="currentColor" /> START HRY</>}
-                    </button>
-                </div>
-                <p className="text-slate-400 text-sm mt-4">Hra začne, až oba hráči potvrdí start.</p>
-            </div>
-            )}
-
-            {/* OTÁZKA */}
-            {currentQuestion && (
-            <div className="bg-slate-800 rounded-2xl p-6 border-2 border-slate-700 space-y-6 animate-slide-up shadow-2xl relative overflow-hidden md:p-8">
-                {!roundResult && (
-                <div className="absolute top-0 left-0 h-3 bg-slate-700 w-full">
-                    <div className={`h-full transition-all duration-1000 ease-linear ${timeLeft > 10 ? 'bg-cyan-500' : timeLeft > 5 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${(timeLeft / 20) * 100}%` }} />
-                </div>
-                )}
-                <div className="flex justify-between items-start pt-4">
-                    {/* Zvětšený text otázky pro desktop (md:text-3xl) */}
-                    <h3 className="text-white text-xl md:text-3xl font-bold text-left leading-relaxed flex-1">{currentQuestion.question}</h3>
-                    {!roundResult && (
-                        <div className={`ml-6 w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold text-2xl ${getTimerColor()}`}>
-                            {timeLeft}
+        {/* === OVLÁDACÍ PANEL === */}
+        <div className="shrink-0 bg-slate-800 border-t border-slate-600 md:border-t-0 md:border-l md:w-[500px] shadow-[0_-5px_30px_rgba(0,0,0,0.9)] z-30">
+            
+            <div className="p-3 md:p-8 flex flex-col justify-center h-full">
+                
+                {/* 1. ČEKÁNÍ NA START */}
+                {!currentQuestion && !gameOver && (
+                    <div className="flex flex-col md:gap-8 gap-4 items-center text-center pb-2">
+                        <div className="space-y-2">
+                            <h3 className="text-white text-lg md:text-2xl font-bold uppercase tracking-widest">
+                                {isReady ? 'Čekání na soupeře' : 'PŘIPRAVENI KE HŘE?'}
+                            </h3>
+                            <p className="text-slate-400 text-xs md:text-sm">Potvrďte start kola</p>
                         </div>
-                    )}
-                </div>
-                <div className="space-y-4">
-                {currentQuestion.options.map((option, index) => {
-                    const isSelected = selectedAnswer === index;
-                    const showResult = roundResult !== null;
-                    const isCorrect = showResult && index === currentQuestion.correct;
-                    const isWrong = showResult && isSelected && index !== currentQuestion.correct;
-                    let btnStyle = "bg-slate-700 border-slate-600 text-white hover:bg-slate-600 hover:border-slate-500";
-                    if (isCorrect) btnStyle = "bg-green-600 border-green-400 text-white shadow-lg shadow-green-500/20 transform scale-105";
-                    else if (isWrong) btnStyle = "bg-red-600 border-red-400 text-white shadow-lg shadow-red-500/20";
-                    else if (isSelected && !showResult) btnStyle = "bg-cyan-600 border-cyan-400 text-white shadow-lg shadow-cyan-500/20";
-                    else if (hasAnswered) btnStyle = "bg-slate-700/50 border-slate-700 text-slate-500";
-
-                    return (
-                    <button
-                        key={index}
-                        onClick={() => handleAnswerClick(index)}
-                        disabled={hasAnswered}
-                        // Zvětšená tlačítka a text pro desktop (md:text-xl, md:p-6)
-                        className={`w-full p-4 md:p-6 rounded-xl font-semibold text-left md:text-xl transition-all active:scale-95 flex items-center gap-4 border-2 ${btnStyle}`}
-                    >
-                        <span className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center font-bold ${isSelected || isCorrect || isWrong ? 'bg-black/20' : 'bg-slate-900'}`}>{String.fromCharCode(65 + index)}</span>
-                        <span className="flex-1">{option}</span>
-                        {isCorrect && <CheckCircle size={28} className="animate-pulse" />}
-                        {isWrong && <XCircle size={28} className="animate-bounce" />}
-                    </button>
-                    );
-                })}
-                </div>
-                {hasAnswered && !roundResult && (
-                <div className="flex items-center justify-center gap-2 text-cyan-400 animate-pulse bg-slate-900/50 p-4 rounded-xl md:text-lg">
-                    <Clock size={24} /> <span className="font-semibold tracking-wide">Odpověď odeslána. Čekám na soupeře...</span>
-                </div>
-                )}
-                {roundResult && showReadyButton && (
-                    <div className="pt-6 animate-fade-in">
-                        <button onClick={handleReadyClick} disabled={isReady} className={`w-full py-6 rounded-xl font-bold text-2xl uppercase tracking-widest transition-all transform ${isReady ? 'bg-slate-600 text-slate-400 cursor-wait' : 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-white hover:scale-105 shadow-lg shadow-orange-500/30'}`}>
-                            {isReady ? 'ČEKÁM NA SOUPEŘE...' : 'PŘIPRAVENI NA DALŠÍ OTÁZKU?'}
+                        
+                        <button 
+                            onClick={handleReadyClick}
+                            disabled={isReady}
+                            className={`w-full py-4 md:py-6 rounded-xl font-black text-xl md:text-3xl uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 ${
+                                isReady 
+                                ? 'bg-slate-700 text-slate-500 cursor-not-allowed border border-white/5' 
+                                : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:brightness-110 text-white shadow-green-900/20'
+                            }`}
+                        >
+                            {isReady ? <Clock className="animate-spin md:w-8 md:h-8"/> : <Play fill="currentColor" className="md:w-8 md:h-8"/>}
+                            {isReady ? 'ČEKÁM' : 'START HRY'}
                         </button>
                     </div>
                 )}
-                {roundResult && !showReadyButton && (
-                    <div className="text-center text-slate-400 text-lg animate-pulse pt-2">Vyhodnocení...</div>
+
+                {/* 2. OTÁZKA */}
+                {currentQuestion && (
+                    <div className="flex flex-col gap-3 md:gap-6 w-full max-w-lg mx-auto md:h-full md:justify-center">
+                        
+                        {/* Timer Line */}
+                        <div className="w-full h-1.5 md:h-3 bg-slate-700 rounded-full overflow-hidden">
+                             <div className={`h-full transition-all duration-1000 linear ${
+                                timeLeft > 10 ? 'bg-cyan-400' : timeLeft > 5 ? 'bg-yellow-400' : 'bg-red-500'
+                            }`} style={{ width: `${(timeLeft / 20) * 100}%` }} />
+                        </div>
+
+                        {/* Text otázky */}
+                        <div className="flex justify-between items-start gap-3 mb-1">
+                            <h3 className="text-white font-bold text-sm md:text-2xl leading-snug max-h-[60px] md:max-h-none overflow-y-auto md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                                {currentQuestion.question}
+                            </h3>
+                            {!roundResult && (
+                                <div className={`shrink-0 w-8 h-8 md:w-16 md:h-16 rounded-lg border-2 flex items-center justify-center font-mono font-bold text-sm md:text-3xl ${getTimerColor()}`}>
+                                    {timeLeft}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Odpovědi */}
+                        <div className="grid grid-cols-1 gap-1.5 md:gap-4 max-h-[35vh] md:max-h-none overflow-y-auto md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                            {currentQuestion.options.map((option, index) => {
+                                const isSelected = selectedAnswer === index;
+                                const showResult = roundResult !== null;
+                                const isCorrect = showResult && index === currentQuestion.correct;
+                                const isWrong = showResult && isSelected && index !== currentQuestion.correct;
+                                
+                                let btnStyle = "bg-slate-700 border-slate-600 text-slate-300";
+                                if (isCorrect) btnStyle = "bg-green-600 border-green-500 text-white";
+                                else if (isWrong) btnStyle = "bg-red-600 border-red-500 text-white";
+                                else if (isSelected) btnStyle = "bg-cyan-700 border-cyan-500 text-white";
+
+                                return (
+                                    <button
+                                        key={index}
+                                        onClick={() => handleAnswerClick(index)}
+                                        disabled={hasAnswered}
+                                        className={`w-full p-2.5 md:p-5 rounded-lg font-medium text-left text-xs md:text-xl border transition-all flex items-center gap-2 md:gap-4 active:scale-98 ${btnStyle}`}
+                                    >
+                                        <div className="w-5 h-5 md:w-8 md:h-8 rounded bg-black/20 flex items-center justify-center text-[10px] md:text-sm font-bold shrink-0">
+                                            {String.fromCharCode(65 + index)}
+                                        </div>
+                                        <span className="flex-1">{option}</span>
+                                        {isCorrect && <CheckCircle size={14} className="shrink-0 md:w-6 md:h-6"/>}
+                                        {isWrong && <XCircle size={14} className="shrink-0 md:w-6 md:h-6"/>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Tlačítko Další kolo */}
+                        {roundResult && showReadyButton && (
+                            <button onClick={handleReadyClick} disabled={isReady} className="mt-2 w-full py-3 md:py-5 bg-orange-500 text-white font-bold uppercase rounded-lg shadow-lg animate-bounce border-t border-white/20 tracking-widest text-xs md:text-xl">
+                                {isReady ? 'Čekám...' : 'PŘIPRAVENI NA DALŠÍ OTÁZKU?'}
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
-            )}
         </div>
-      </div>
-      
-      {/* FOOTER S INFORMACÍ O MÓDU */}
-      {/* Na desktopu ho posuneme trochu dolů (md:mt-12) */}
-      <div className="mt-8 md:mt-12 text-center opacity-50 hover:opacity-100 transition-opacity z-10">
-        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${gameMode === 'kid' ? 'border-pink-500 text-pink-300' : 'border-blue-500 text-blue-300'}`}>
-             {gameMode === 'kid' ? <Baby size={14}/> : <Brain size={14}/>}
-             <span className="text-xs font-bold tracking-widest uppercase">
-                 {gameMode === 'kid' ? 'REŽIM JUNIOR' : 'REŽIM DOSPĚLÝ'}
-             </span>
-        </div>
-      </div>
 
-       {/* Pozadí efekt */}
-       <div className="absolute inset-0 pointer-events-none">
-          <div className={`absolute top-1/4 left-10 w-96 h-96 rounded-full blur-[150px] animate-pulse transition-colors duration-1000 opacity-30 ${gameMode === 'kid' ? 'bg-pink-600/30' : 'bg-cyan-600/30'}`}></div>
-          <div className={`absolute bottom-1/4 right-10 w-96 h-96 rounded-full blur-[150px] animate-pulse delay-1000 transition-colors duration-1000 opacity-30 ${gameMode === 'kid' ? 'bg-purple-600/30' : 'bg-blue-600/30'}`}></div>
-        </div>
+      </div>
     </div>
   );
 }
