@@ -309,6 +309,7 @@ ZAKÁZANÉ OTÁZKY:
 ❌ "Kdyby byla kočka člověkem..." (fantazie)
 ❌ "Jaký je tvůj oblíbený..." (názor)
 ❌ Otázky bez faktické odpovědi
+❌ Sugestivní nápověda v odpovědích (např. "Který italský pokrm ve stylu těstovin..." s odpovědí "Těstoviny")
 
 Formát odpovědi (POUZE JSON):
 {
