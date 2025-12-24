@@ -9,9 +9,9 @@ const openai = new OpenAI({
 
 // === 🧠 PAMĚŤ NEDÁVNÝCH OTÁZEK (Anti-repeat) ===
 const recentQuestions = [];
-const recentEntities = []; // Nová paměť pro jména, osoby, místa
-const MAX_HISTORY = 50; // Zvýšeno z 30 na 50
-const MAX_ENTITY_HISTORY = 100; // Pamatuj si 100 entit
+const recentEntities = []; // Paměť pro jména, osoby, místa
+const MAX_HISTORY = 50; // Pamatuj 50 otázek (cca 4+ hodiny hraní)
+const MAX_ENTITY_HISTORY = 100; // Pamatuj 100 entit (Francie, Praha, Einstein...)
 
 function addToHistory(question) {
   recentQuestions.push(question.toLowerCase());
@@ -60,7 +60,7 @@ function isQuestionUnique(question) {
       // Počítáme kolikrát se entita objevila
       const entityCount = recentEntities.filter(e => e === lowerEntity).length;
       
-      if (entityCount >= 3) { // Změněno z 2 na 3
+      if (entityCount >= 2) { // Zpřísněno: entita se může objevit max 1x během 25 otázek
         console.log(`⚠️ DUPLICITA ENTITY: "${entity}" se již objevil ${entityCount}x!`);
         return false;
       }
@@ -70,7 +70,7 @@ function isQuestionUnique(question) {
   // 3. Kontrola podobnosti (klíčová slova)
   for (const oldQ of recentQuestions) {
     const similarity = calculateSimilarity(lowerQuestion, oldQ);
-    if (similarity > 0.7) { // 70% podobnost = duplicita
+    if (similarity > 0.5) { // 50% podobnost = duplicita (zpřísněno z 70%)
       console.log(`⚠️ DUPLICITA: ${(similarity * 100).toFixed(0)}% podobnost s předchozí otázkou!`);
       return false;
     }
