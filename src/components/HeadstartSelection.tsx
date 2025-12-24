@@ -43,39 +43,43 @@ export default function HeadstartSelection({ isPreyPlayer, onSelectHeadstart }: 
             // Definice stylů a textů pro každou variantu
             let gradient = "";
             let shadow = "";
-            let labelText = "";
-            let descText = "";
+            let titleText = "";
+            let rewardText = "";
+            let styleText = "";
 
             if (headstart === 2) {
                 gradient = "from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500";
                 shadow = "shadow-red-500/50";
-                labelText = "RISKANTNÍ";
-                descText = "Začínáš nebezpečně blízko Lovce";
+                titleText = "NÁSKOK 2 OTÁZKY";
+                rewardText = "💰 VĚTŠÍ ODMĚNA";
+                styleText = "🔥 RISKANTNÍ HRA";
             } else if (headstart === 3) {
                 gradient = "from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400";
                 shadow = "shadow-orange-500/50";
-                labelText = "VYVÁŽENÁ";
-                descText = "Zlatá střední cesta";
+                titleText = "NÁSKOK 3 OTÁZKY";
+                rewardText = "💰 ODMĚNA TAK AKORÁT";
+                styleText = "⚖️ VYVÁŽENÁ HRA";
             } else {
                 gradient = "from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500";
                 shadow = "shadow-green-500/50";
-                labelText = "NADĚJNÁ";
-                descText = "Začínáš daleko od Lovce";
+                titleText = "NÁSKOK 4 OTÁZKY";
+                rewardText = "💰 SYMBOLICKÁ CENA";
+                styleText = "🌟 NADĚJNÁ HRA";
             }
 
             return (
               <button
                 key={headstart}
                 onClick={() => onSelectHeadstart(headstart)}
-                className={`w-full bg-gradient-to-r ${gradient} text-white font-bold py-8 px-8 rounded-2xl text-3xl shadow-lg ${shadow} transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center gap-4`}
+                className={`w-full bg-gradient-to-r ${gradient} text-white font-bold py-6 px-6 rounded-2xl shadow-lg ${shadow} transition-all transform hover:scale-105 active:scale-95`}
               >
-                <span className="text-5xl">🏃</span>
-                <div className="text-left">
-                  <div>NÁSKOK {headstart}</div>
-                  <div className="text-sm font-bold opacity-100">{labelText}</div>
-                  <p className="text-xs opacity-80 font-normal">
-                    {descText}
-                  </p>
+                <div className="flex items-center gap-4">
+                  <span className="text-5xl">🏃</span>
+                  <div className="text-left flex-1">
+                    <div className="text-2xl font-black tracking-wide">{titleText}</div>
+                    <div className="text-sm font-semibold opacity-90 mt-1">{rewardText}</div>
+                    <div className="text-xs font-bold opacity-80 mt-0.5">{styleText}</div>
+                  </div>
                 </div>
               </button>
             );

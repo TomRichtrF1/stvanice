@@ -43,14 +43,15 @@ function saveCodes(db) {
 }
 
 /**
- * Vygeneruje náhodný 12-znakový kód ve formátu XXXX-XXXX-XXXX
+ * ✅ OPRAVENÁ VERZE: Vygeneruje náhodný 12-znakový kód ve formátu XXXX-XXXX-XXXX
  */
 export function generateCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
   
-  for (let i = 0; i < 12; i++) {
-    if (i === 4 || i === 8) {
+  // ✅ OPRAVA: Iterujeme 14x (12 znaků + 2 pomlčky)
+  for (let i = 0; i < 14; i++) {
+    if (i === 4 || i === 9) {  // ✅ OPRAVA: pomlčky na pozicích 4 a 9
       code += '-';
     } else {
       code += chars.charAt(Math.floor(Math.random() * chars.length));

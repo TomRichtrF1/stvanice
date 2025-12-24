@@ -4,6 +4,8 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import Stripe from 'stripe';
+import fs from 'fs';
+import path from 'path';
 // ZDE JE IMPORT NAŠEHO NOVÉHO MOZKU:
 import { generateQuestion } from './question_generator.js';
 // IMPORT CODE MANAGERU:
@@ -72,9 +74,14 @@ app.get('/api/cleanup-codes', (req, res) => {
 
 // === STRIPE ENDPOINTY ===
 
-// Vytvoření Stripe Checkout Session
+// ✅✅✅ NOVÁ VERZE: Vytvoření kódu JIŽ PŘI VYTVOŘENÍ PLATBY ✅✅✅
 app.post('/api/create-checkout-session', async (req, res) => {
   try {
+    // 🎫 VYGENERUJ KÓD JIŽ TEĎKA (před platbou)
+    const gameCode = createGameCode('premium');
+    
+    console.log(`🎫 Vytvořen předběžný kód pro checkout: ${gameCode.code}`);
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -85,7 +92,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
               name: 'Štvanice - Premium Herní Kód',
               description: 'Měsíční přístup k vlastním tématům otázek',
             },
-            unit_amount: 1600, // 16 Kč v haléřích
+            unit_amount: 3900, // 39 Kč v haléřích
           },
           quantity: 1,
         },
@@ -93,7 +100,16 @@ app.post('/api/create-checkout-session', async (req, res) => {
       mode: 'payment',
       success_url: `${req.headers.origin || 'https://stvanice-823170647fe5.herokuapp.com'}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.origin || 'https://stvanice-823170647fe5.herokuapp.com'}/`,
+      
+      // ✅ KÓD ULOŽÍME DO METADATA!
+      metadata: {
+        game_code: gameCode.code,
+        expires_at: gameCode.expiresAt,
+        topic: gameCode.topic
+      }
     });
+
+    console.log(`✅ Stripe session vytvořena s kódem v metadata: ${session.id}`);
 
     res.json({ sessionId: session.id, url: session.url });
   } catch (error) {
@@ -119,52 +135,64 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
   // Handle the event
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-
-    // Vygeneruj herní kód (BEZ tématu - téma se zadává při použití kódu)
-    const gameCode = createGameCode('premium'); // 'premium' jako placeholder
+    const gameCode = session.metadata.game_code;
     
-    console.log(`✅ Platba úspěšná! Vygenerován kód: ${gameCode.code}`);
+    console.log(`✅ Platba potvrzena! Kód z metadata: ${gameCode}`);
     console.log(`💡 Kód je platný 30 dní a umožňuje zadávat vlastní témata`);
     
-    // TODO: Můžeš zde poslat email s kódem (např. přes SendGrid)
-    // sendEmail(session.customer_email, gameCode.code);
+    // Kód je již vytvořen v codes.json (při vytvoření checkout session)
+    // Můžeš zde poslat email s kódem (např. přes SendGrid)
+    // sendEmail(session.customer_email, gameCode);
   }
 
   res.json({ received: true });
 });
 
-// Success page - zobrazí kód po platbě
+// ✅✅✅ NOVÁ VERZE: Success page - KÓD Z STRIPE METADATA ✅✅✅
 app.get('/api/get-session-code', async (req, res) => {
   try {
     const { session_id } = req.query;
     
     if (!session_id) {
+      console.error('❌ /api/get-session-code - Chybí session_id');
       return res.status(400).json({ error: 'Chybí session_id' });
     }
 
+    console.log(`🔍 /api/get-session-code - Načítám session: ${session_id}`);
+
+    // Získej session ze Stripe
     const session = await stripe.checkout.sessions.retrieve(session_id);
     
+    console.log(`💳 Payment status: ${session.payment_status}`);
+    console.log(`📦 Metadata:`, session.metadata);
+    
     if (session.payment_status !== 'paid') {
+      console.error('❌ Platba nebyla dokončena');
       return res.status(400).json({ error: 'Platba nebyla dokončena' });
     }
 
-    // Najdi nejnovější premium kód (ten právě vytvořený webhookem)
-    const allCodes = JSON.parse(require('fs').readFileSync('./codes.json', 'utf-8'));
-    const recentCode = allCodes.codes
-      .filter(c => c.topic === 'premium') // Filtruj premium kódy
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    // ✅ KÓD JE V METADATA!
+    const gameCode = session.metadata?.game_code;
+    const expiresAt = session.metadata?.expires_at;
 
-    if (!recentCode) {
-      return res.status(404).json({ error: 'Kód nebyl nalezen' });
+    if (!gameCode) {
+      console.error('❌ Kód nenalezen v session metadata');
+      console.error('Session metadata obsah:', session.metadata);
+      return res.status(404).json({ error: 'Kód nebyl nalezen v platební session' });
     }
 
+    console.log(`✅ Kód úspěšně načten z metadata: ${gameCode}`);
+
     res.json({ 
-      code: recentCode.code,
-      expiresAt: recentCode.expiresAt
+      code: gameCode,
+      expiresAt: expiresAt
     });
   } catch (error) {
-    console.error('❌ Error retrieving session:', error);
-    res.status(500).json({ error: 'Nepodařilo se načíst kód' });
+    console.error('❌ Error v /api/get-session-code:', error);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Nepodařilo se načíst kód: ' + error.message 
+    });
   }
 });
 
@@ -217,6 +245,7 @@ io.on('connection', (socket) => {
     const gameState = {
       code: roomCode,
       players: [{ id: socket.id, role: null, position: 0, answer: null, ready: false }],
+      spectators: [], // 🎬 NOVÉ: Seznam diváků
       phase: 'lobby',
       
       // === NOVÉ NASTAVENÍ ===
@@ -367,6 +396,12 @@ io.on('connection', (socket) => {
     player.answer = answerIndex;
 
     io.to(code).emit('player_answered', { playerId: socket.id });
+    
+    // 🎬 SPECTATOR: Pošli detailní info o odpovědi (role + odpověď)
+    io.to(code).emit('spectator_player_answered', { 
+      role: player.role, 
+      answerIndex: answerIndex 
+    });
 
     if (game.players.every(p => p.answer !== null)) {
       // 1. HNED pošleme signál: "Všichni odpověděli, pusť napětí!"
@@ -471,9 +506,87 @@ io.on('connection', (socket) => {
     resetGame(code);
   });
 
+  // === 🎬 SPECTATOR MODE ===
+  socket.on('join_as_spectator', ({ gameCode, premiumCode }) => {
+    console.log(`🎬 Spectator request for game: ${gameCode}`);
+    
+    // 1. Ověř premium kód
+    const isAdmin = premiumCode === 'STVANECADMIN';
+    const premiumResult = !isAdmin ? validateCode(premiumCode) : { valid: true };
+    
+    if (!isAdmin && !premiumResult.valid) {
+      socket.emit('spectator_error', { message: 'Neplatný premium kód' });
+      return;
+    }
+    
+    // 2. Ověř že hra existuje
+    const game = games.get(gameCode);
+    if (!game) {
+      socket.emit('spectator_error', { message: 'Hra neexistuje' });
+      return;
+    }
+    
+    // 3. Připoj do room jako spectator
+    socket.join(gameCode);
+    socket.isSpectator = true;
+    socket.spectatorGame = gameCode;
+    
+    // Přidej do seznamu diváků
+    if (!game.spectators) game.spectators = [];
+    game.spectators.push(socket.id);
+    
+    console.log(`🎬 Spectator joined game ${gameCode}. Total spectators: ${game.spectators.length}`);
+    
+    // 4. Pošli aktuální stav hry
+    socket.emit('spectator_joined', {
+      phase: game.phase,
+      players: game.players.map(p => ({ 
+        id: p.id, 
+        role: p.role, 
+        position: p.position,
+        answer: p.answer,
+        ready: p.ready
+      })),
+      currentQuestion: game.currentQuestion,
+      settings: game.settings,
+      headstart: game.headstart
+    });
+  });
+
+  // Spectator žádá o aktuální stav (refresh)
+  socket.on('spectator_refresh', ({ gameCode }) => {
+    const game = games.get(gameCode);
+    if (!game || !socket.isSpectator) return;
+    
+    socket.emit('spectator_state', {
+      phase: game.phase,
+      players: game.players.map(p => ({ 
+        id: p.id, 
+        role: p.role, 
+        position: p.position,
+        answer: p.answer,
+        ready: p.ready
+      })),
+      currentQuestion: game.currentQuestion,
+      settings: game.settings,
+      headstart: game.headstart
+    });
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
 
+    // 🎬 Odstraň spectatora pokud odchází
+    if (socket.isSpectator && socket.spectatorGame) {
+      const game = games.get(socket.spectatorGame);
+      if (game && game.spectators) {
+        game.spectators = game.spectators.filter(id => id !== socket.id);
+        console.log(`🎬 Spectator left game ${socket.spectatorGame}. Remaining: ${game.spectators.length}`);
+      }
+      return; // Spectator neukončuje hru
+    }
+
+    // Hráč odchází - ukončí hru
     games.forEach((game, code) => {
       const playerIndex = game.players.findIndex(p => p.id === socket.id);
       if (playerIndex !== -1) {
@@ -489,6 +602,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 ╔════════════════════════════════════════╗
 ║   ŠTVANICE Server Running              ║
 ║   Mode: AI ENABLED 🧠                  ║
+║   Payment: METADATA STORAGE 🎫         ║
 ╚════════════════════════════════════════╝
   `);
   console.log(`Visit: http://localhost:${PORT}`);

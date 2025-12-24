@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Check, Copy, AlertCircle, Loader } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function SuccessPage() {
   const [code, setCode] = useState<string | null>(null);
@@ -11,9 +11,9 @@ export default function SuccessPage() {
   const [confirmed, setConfirmed] = useState(false);
   
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
     const sessionId = searchParams.get('session_id');
 
     if (!sessionId) {
@@ -22,10 +22,16 @@ export default function SuccessPage() {
       return;
     }
 
+    console.log('🔍 Načítám kód pro session:', sessionId);
+
     // Získej kód ze serveru
     fetch(`/api/get-session-code?session_id=${sessionId}`)
-      .then(res => res.json())
+      .then(res => {
+        console.log('📡 API odpověď:', res.status);
+        return res.json();
+      })
       .then(data => {
+        console.log('📦 Data z API:', data);
         if (data.error) {
           setError(data.error);
         } else {
@@ -35,11 +41,11 @@ export default function SuccessPage() {
         setLoading(false);
       })
       .catch(err => {
-        console.error('Error fetching code:', err);
+        console.error('❌ Error fetching code:', err);
         setError('Nepodařilo se načíst kód');
         setLoading(false);
       });
-  }, []);
+  }, [searchParams]);
 
   const handleCopy = () => {
     if (code) {

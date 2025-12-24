@@ -1,0 +1,32 @@
+{
+  "codes": [
+    {
+      "code": "ZFZJ-E5V-MYJ",
+      "topic": "premium",
+      "createdAt": "2025-12-24T08:18:26.706Z",
+      "expiresAt": "2026-01-23T08:18:26.706Z",
+      "used": false
+    },
+    {
+      "code": "U87M-DY5C-61RW",
+      "topic": "premium",
+      "createdAt": "2025-12-24T08:23:27.870Z",
+      "expiresAt": "2026-01-23T08:23:27.870Z",
+      "used": false
+    },
+    {
+      "code": "DCCZ-T9SU-UGEA",
+      "topic": "premium",
+      "createdAt": "2025-12-24T13:52:30.639Z",
+      "expiresAt": "2026-01-23T13:52:30.639Z",
+      "used": false
+    },
+    {
+      "code": "44HH-KNO2-AVVX",
+      "topic": "premium",
+      "createdAt": "2025-12-24T15:12:45.367Z",
+      "expiresAt": "2026-01-23T15:12:45.367Z",
+      "used": false
+    }
+  ]
+}

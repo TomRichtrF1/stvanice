@@ -209,11 +209,20 @@ export default function GameBoard({
               {myRole === 'hunter' ? 'LOVEC' : 'ŠTVANEC'}
             </span>
          </div>
-         <div className="flex items-center gap-1.5 opacity-60 bg-black/20 px-2 py-0.5 md:px-4 md:py-1.5 rounded-full">
-            {gameMode === 'kid' ? <Baby size={12} className="md:w-5 md:h-5"/> : <Brain size={12} className="md:w-5 md:h-5"/>}
-            <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider">
-                {gameMode === 'kid' ? 'REŽIM JUNIOR' : 'REŽIM DOSPĚLÝ'}
-            </span>
+         <div className="flex items-center gap-2 md:gap-4">
+            {/* KÓD LOBBY */}
+            <div className="bg-black/30 px-2 py-0.5 md:px-3 md:py-1 rounded-full">
+               <span className="text-[9px] md:text-xs font-mono text-slate-400">
+                  HRA <span className="text-cyan-400 font-bold">{roomCode}</span>
+               </span>
+            </div>
+            {/* REŽIM */}
+            <div className="flex items-center gap-1.5 opacity-60 bg-black/20 px-2 py-0.5 md:px-4 md:py-1.5 rounded-full">
+               {gameMode === 'kid' ? <Baby size={12} className="md:w-5 md:h-5"/> : <Brain size={12} className="md:w-5 md:h-5"/>}
+               <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider">
+                   {gameMode === 'kid' ? 'JUNIOR' : 'DOSPĚLÝ'}
+               </span>
+            </div>
          </div>
       </div>
 

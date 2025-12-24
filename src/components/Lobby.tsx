@@ -52,9 +52,14 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
           <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 drop-shadow-sm tracking-tight pb-2">
             ŠTVANICE
           </h1>
-          <p className="text-slate-400 text-lg font-medium tracking-wide uppercase">
-            Vědomostní hra na ostří nože
-          </p>
+          <div className="space-y-1">
+            <p className="text-slate-300 text-base font-bold tracking-wide uppercase">
+              Napínavá vědomostní hra pro dva
+            </p>
+            <p className="text-slate-500 text-xs font-medium tracking-wider">
+              REŽIM: DOSPĚLÝ / JUNIOR • DIVÁCKÁ MÍSTNOST PRO FANDĚNÍ
+            </p>
+          </div>
         </div>
 
         {/* Hlavní menu */}
@@ -85,6 +90,18 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
               </div>
               <div className="text-blue-100 text-sm font-semibold bg-blue-700/30 px-3 py-1 rounded-full">Mám kód</div>
             </button>
+
+            {/* DIVÁCKÁ MÍSTNOST - decentní odkaz */}
+            <div className="text-center pt-2">
+              <a
+                href="/divaci"
+                className="text-slate-500 hover:text-purple-400 text-sm transition-colors inline-flex items-center gap-2"
+              >
+                <span>👁️</span>
+                <span>Divácká místnost</span>
+                <span className="text-purple-400/70 text-xs">⭐ premium</span>
+              </a>
+            </div>
           </div>
         ) : (
           /* Vstup pro kód */

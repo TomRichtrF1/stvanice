@@ -4,10 +4,10 @@ import { useGameAudio } from './hooks/useGameAudio';
 import Lobby from './components/Lobby';
 import WaitingRoom from './components/WaitingRoom';
 import TopicSelection from './components/TopicSelection'; // ✅ NOVÝ IMPORT
-import SuccessPage from './components/SuccessPage'; // ✅ STRIPE SUCCESS PAGE
 import RoleSelection from './components/RoleSelection';
 import HeadstartSelection from './components/HeadstartSelection';
 import GameBoard from './components/GameBoard';
+import SpectatorView from './components/SpectatorView'; // 🎬 NOVÝ IMPORT
 import { AlertCircle } from 'lucide-react';
 
 type GamePhase = 'lobby' | 'waiting' | 'topic_selection' | 'role_selection' | 'headstart_selection' | 'playing' | 'finished';
@@ -25,6 +25,13 @@ interface Question {
 }
 
 function App() {
+  // 🎬 SPECTATOR MODE ROUTING
+  // Pokud URL začíná /divaci, zobraz SpectatorView
+  const isSpectatorMode = window.location.pathname.startsWith('/divaci');
+  if (isSpectatorMode) {
+    return <SpectatorView />;
+  }
+
   const { socket, connected } = useSocket();
   const { playAmbient, stopAmbient, playSfx } = useGameAudio();
   
@@ -149,12 +156,6 @@ function App() {
 
   if (!connected) return <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4"><div className="text-center space-y-4"><div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto"></div><p className="text-white text-xl">Připojování k serveru...</p></div></div>;
   if (disconnected) return <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4"><div className="w-full max-w-md space-y-6 text-center animate-fade-in"><AlertCircle className="w-20 h-20 text-red-500 mx-auto" /><h2 className="text-3xl font-bold text-white">Soupeř se odpojil</h2><p className="text-slate-400">Hra byla ukončena</p><button onClick={() => window.location.reload()} className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl shadow-lg shadow-cyan-500/50 transition-all transform hover:scale-105">ZPĚT DO LOBBY</button></div></div>;
-
-  // ✅ STRIPE SUCCESS PAGE
-  const isSuccessPage = window.location.pathname === '/success';
-  if (isSuccessPage) {
-    return <SuccessPage />;
-  }
 
   return (
     <>

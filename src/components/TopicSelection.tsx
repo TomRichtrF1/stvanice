@@ -154,7 +154,7 @@ export default function TopicSelection({ roomCode, socket, onTopicSelected }: To
               </div>
               <div className="text-left">
                 <div>ZVOLIT OKRUH OTÁZEK</div>
-                <div className="text-sm font-normal opacity-80">16 Kč na měsíc</div>
+                <div className="text-sm font-normal opacity-80">39 Kč na měsíc</div>
               </div>
             </div>
             <div className="text-yellow-100 text-sm font-semibold bg-yellow-700/30 px-3 py-1 rounded-full">Premium</div>
@@ -166,7 +166,7 @@ export default function TopicSelection({ roomCode, socket, onTopicSelected }: To
           <Info size={20} className="text-blue-400 mt-0.5 flex-shrink-0" />
           <p className="text-slate-300 text-sm">
             <strong>Zdarma:</strong> Otázky ze všech možných oblastí dle naší volby<br/>
-            <strong>Premium:</strong> Zadej oblíbené témata (například "fotbal česká historie" či "kouzla italské kuchyně") - za 16,- Kč na měsíc
+            <strong>Premium:</strong> Zadej oblíbené témata (například "fotbal česká historie" či "kouzla italské kuchyně") - za 39,- Kč na měsíc
           </p>
         </div>
 
@@ -211,7 +211,7 @@ export default function TopicSelection({ roomCode, socket, onTopicSelected }: To
                       className="w-full bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white font-bold py-4 rounded-xl transition-all text-lg shadow-lg flex items-center justify-center gap-2"
                     >
                       <Crown size={20} />
-                      KOUPIT KÓD (16 Kč)
+                      KOUPIT KÓD (39 Kč)
                     </button>
 
                     {validationMessage && validationMessage.includes('🔄') && (
@@ -227,7 +227,7 @@ export default function TopicSelection({ roomCode, socket, onTopicSelected }: To
                       className="w-full text-slate-400 hover:text-white text-sm transition-colors flex items-center justify-center gap-1"
                     >
                       <Info size={16} />
-                      Co dostanu za 16 Kč?
+                      Co dostanu za 39 Kč?
                     </button>
                   </>
                 ) : !codeConfirmed ? (

@@ -20,8 +20,12 @@ function addToHistory(question) {
   }
   
   // === 🆕 EXTRAHUJ A PAMATUJ SI ENTITY (jména, místa) ===
-  // Hledáme slova začínající velkým písmenem (pravděpodobně jména)
-  const entities = question.match(/\b[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+(?:\s+[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+)*/g);
+  // Ignorujeme první slovo věty (vždy má velké písmeno)
+  const firstSpaceIndex = question.indexOf(' ');
+  const withoutFirstWord = firstSpaceIndex > 0 ? question.substring(firstSpaceIndex + 1) : '';
+  
+  // Hledáme slova začínající velkým písmenem (min. 4 znaky = skutečná jména)
+  const entities = withoutFirstWord.match(/\b[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]{3,}(?:\s+[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+)*/g);
   
   if (entities) {
     entities.forEach(entity => {
@@ -44,7 +48,11 @@ function isQuestionUnique(question) {
   }
   
   // 2. 🆕 KONTROLA OPAKOVANÝCH ENTIT (jména, osoby)
-  const entities = question.match(/\b[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+(?:\s+[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+)*/g);
+  // Ignorujeme první slovo věty (vždy má velké písmeno)
+  const firstSpaceIndex = question.indexOf(' ');
+  const withoutFirstWord = firstSpaceIndex > 0 ? question.substring(firstSpaceIndex + 1) : '';
+  
+  const entities = withoutFirstWord.match(/\b[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]{3,}(?:\s+[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+)*/g);
   
   if (entities) {
     for (const entity of entities) {
@@ -52,7 +60,7 @@ function isQuestionUnique(question) {
       // Počítáme kolikrát se entita objevila
       const entityCount = recentEntities.filter(e => e === lowerEntity).length;
       
-      if (entityCount >= 2) { // Pokud entita už byla 2x a víc, odmítni
+      if (entityCount >= 3) { // Změněno z 2 na 3
         console.log(`⚠️ DUPLICITA ENTITY: "${entity}" se již objevil ${entityCount}x!`);
         return false;
       }
@@ -86,11 +94,12 @@ const weightedTopics = [
   // SPORT (vysoká váha - populární)
   ["Sport: Fotbal", 8],
   ["Sport: Hokej", 6],
-  ["Sport: Basketbal", 6],
+  ["Sport: Basketbal", 4],
   ["Sport: Tenis", 5],
   ["Sport: Atletika", 4],
   ["Sport: Zimní olympijské sporty", 4],
-  ["Sport: Motorsport (F1, MotoGP)", 3],
+  ["Sport: Letní olympijské sporty", 4],
+  ["Sport: Motorsport (F1, MotoGP)", 2],
   ["Sport: Box a bojové sporty", 3],
   
   // PŘÍRODA & ZVÍŘATA (střední-vysoká váha)
@@ -103,6 +112,7 @@ const weightedTopics = [
   ["Příroda: Savany a pouště", 3],
   ["Příroda: Hory a sopky", 4],
   ["Příroda: Oceány a moře", 4],
+  ["Příroda: Flóra a fauna", 4],
   
   // ZEMĚPIS (vysoká váha - populární)
   ["Zeměpis: Evropa", 7],
@@ -117,19 +127,20 @@ const weightedTopics = [
   ["Historie: Starověk (Egypt, Řím, Řecko)", 5],
   ["Historie: Středověk a rytíři", 5],
   ["Historie: Vikingové", 4],
+  ["Historie: Moderní historie", 4],
   ["Historie: Piráti", 5],
-  ["Historie: Druhá světová válka", 4],
+  ["Historie: První a Druhá světová válka", 4],
   ["Historie: České dějiny", 6],
   ["Historie: Starověké civilizace (Mayové, Aztékové)", 3],
   ["Historie: Titanic a slavné lodě", 4],
   
   // FILM & ZÁBAVA (velmi vysoká váha - populární!)
-  ["Film: Disney a Pixar filmy", 8],
+  ["Film: Hollywoodská kinematografie", 8],
   ["Film: Slavné filmy a seriály", 7],
   ["Popkultura: Videohry", 6],
   ["Popkultura: Komiksy a superhrdiny", 6],
   ["Popkultura: YouTube a internet", 5],
-  ["Popkultura: Anime a manga", 4],
+  ["Popkultura: Anime a manga", 2],
   
   // HUDBA (střední-vysoká váha)
   ["Hudba: Rock a pop", 6],
@@ -137,6 +148,7 @@ const weightedTopics = [
   ["Hudba: Klasická hudba", 3],
   ["Hudba: Slavné kapely a zpěváci", 6],
   ["Hudba: Hudební nástroje", 4],
+  ["Hudba: Hudební historie", 3],
   
   // VĚDA (střední váha)
   ["Vesmír: Planety sluneční soustavy", 6],
@@ -144,17 +156,18 @@ const weightedTopics = [
   ["Vesmír: Kosmonautika", 5],
   ["Fyzika: Základní principy", 3],
   ["Chemie: Chemické prvky", 3],
-  ["Biologie: Lidské tělo", 5],
+  ["Biologie: Lidské tělo", 7],
   ["Technologie: Historie internetu", 4],
-  ["Technologie: Umělá inteligence", 4],
+  ["Technologie: Umělá inteligence", 3],
   ["Technologie: Mobilní telefony", 5],
   
   // GASTRONOMIE (střední váha)
-  ["Gastronomie: Italská kuchyně", 5],
+  ["Gastronomie: Evropská kuchyně", 7],
   ["Gastronomie: Asijská kuchyně", 4],
   ["Gastronomie: Fast food", 5],
   ["Gastronomie: Sladkosti a čokoláda", 6],
   ["Gastronomie: Pivo a víno", 4],
+  ["Gastronomie: Historie", 6],
   
   // UMĚNÍ & KULTURA (nižší váha)
   ["Umění: Slavní malíři", 3],
@@ -167,13 +180,15 @@ const weightedTopics = [
   ["Doprava: Letadla", 4],
   ["Doprava: Vlaky", 3],
   ["Doprava: Lodě", 3],
+  ["Doprava: Historické vynálezy a průkopnické objevy", 4],
   
   // ZAJÍMAVOSTI (střední váha)
   ["Mytologie: Řecká mytologie", 5],
   ["Mytologie: Severská mytologie", 4],
-  ["Rekórdy: Guinness World Records", 5],
+  ["Rekordy: Guinness World Records", 7],
   ["UNESCO: Světové památky", 3],
   ["Olympiáda: Olympijské hry", 4],
+  ["Co je zažito: Největší mýtusy a omyly", 7],
 ];
 
 // === 🎰 FUNKCE PRO VÁŽENÝ NÁHODNÝ VÝBĚR ===
@@ -253,6 +268,9 @@ export async function generateQuestion(topic = 'general', mode = 'adult', maxRet
     console.log("👶 Režim: JUNIOR (6-12 let)");
     
     systemPersona = `Jsi zkušený tvůrce vzdělávacích her pro děti ve věku 6-12 let.
+
+JAZYK: Piš VŽDY gramaticky správnou češtinou. Používej jednoduché, jasné věty.
+
 Tvoje otázky jsou:
 - ZÁBAVNÉ a SROZUMITELNÉ
 - Bez složitých pojmů a cizích slov
@@ -338,15 +356,20 @@ Formát (POUZE JSON):
     try {
       console.log(`🔄 Pokus ${attempt}/${maxRetries}...`);
       
+      // 🎛️ RŮZNÉ PARAMETRY PRO JUNIOR vs DOSPĚLÝ
+      const temperature = mode === 'kid' ? 0.7 : 1.0;
+      const frequencyPenalty = mode === 'kid' ? 0.3 : 0.5;
+      const presencePenalty = mode === 'kid' ? 0.3 : 0.5;
+      
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPersona },
           { role: "user", content: userPrompt }
         ],
-        temperature: 1.2, // 🔥 ZVÝŠENÁ KREATIVITA (bylo 1.0)
-        presence_penalty: 0.7, // 🆕 Penalizace opakování
-        frequency_penalty: 0.7, // 🆕 Penalizace častých slov
+        temperature: temperature,
+        presence_penalty: presencePenalty,
+        frequency_penalty: frequencyPenalty,
         max_tokens: 300,
       });
 
@@ -360,7 +383,14 @@ Formát (POUZE JSON):
         throw new Error("Neplatná struktura JSON");
       }
       
-      // 🆕 Anti-repeat check
+      // 🔔 POSLEDNÍ POKUS = VŽDY AKCEPTOVAT!
+      if (attempt === maxRetries) {
+        console.log("🔔 Poslední pokus - akceptuji bez dalších kontrol!");
+        addToHistory(parsed.question);
+        return parsed;
+      }
+      
+      // 🆕 Anti-repeat check (jen pro pokusy 1-4)
       if (!isQuestionUnique(parsed.question)) {
         console.log("⚠️ Otázka je příliš podobná předchozí, zkouším znovu...");
         continue;
@@ -395,6 +425,11 @@ Formát (POUZE JSON):
       }
     }
   }
+  
+  // 🆘 SAFETY FALLBACK: Pokud jsme prošli loop bez return
+  console.log("🆘 Loop skončil bez return, používám fallback...");
+  const fallbacks = mode === 'kid' ? fallbackQuestions.kid : fallbackQuestions.adult;
+  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
 }
 
 // 🆕 Export pro testing
