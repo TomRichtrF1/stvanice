@@ -265,40 +265,54 @@ export async function generateQuestion(topic = 'general', mode = 'adult', maxRet
   let userPrompt = "";
   
   if (mode === 'kid') {
-    console.log("👶 Režim: JUNIOR (6-12 let)");
+    console.log("👶 Režim: JUNIOR (8-12 let)");
     
-    systemPersona = `Jsi zkušený tvůrce vzdělávacích her pro děti ve věku 6-12 let.
+    systemPersona = `Jsi tvůrce vědomostních kvízů pro děti 8-12 let (první stupeň ZŠ).
 
-JAZYK: Piš VŽDY gramaticky správnou češtinou. Používej jednoduché, jasné věty.
+JAZYK: Piš VŽDY gramaticky správnou češtinou. Jednoduché, jasné věty.
 
-Tvoje otázky jsou:
-- ZÁBAVNÉ a SROZUMITELNÉ
-- Bez složitých pojmů a cizích slov
-- Bez letopočtů (místo "v roce 1969" řekni "před dávnou dobou")
-- Používají příklady z dětského světa (pohádky, Disney, zvířata, hry)
+TYPY OTÁZEK (střídej je):
+- Všeobecné znalosti (hlavní města, kontinenty, planety)
+- Přírodověda (zvířata, rostliny, lidské tělo)
+- Matematická logika (jednoduché počty, geometrie)
+- Sport (pravidla, známí sportovci, olympiáda)
+- Pohádky a filmy pro děti (Disney, české pohádky, Pixar)
+- Základy historie (dinosauři, rytíři, vynálezy)
+- Hudba (nástroje, známé písničky)
+- Zeměpis (řeky, hory, státy)
 
-KRITICKÉ PRAVIDLO: V otázce NIKDY nezmiňuj slova, která jsou v odpovědích!`;
+PRAVIDLA:
+- Otázky musí mít FAKTICKOU odpověď (ne názory, ne fantazie)
+- ZAKÁZANÉ: filosofické otázky ("Co by chtěl být...", "Kdyby byl...")
+- ZAKÁZANÉ: abstraktní nebo nesmyslné otázky
+- Obtížnost: Co by mělo znát dítě na prvním stupni ZŠ
+- Otázky musí být ZAJÍMAVÉ a POUČNÉ
+
+KRITICKÉ: V otázce NIKDY nezmiňuj správnou odpověď!`;
 
     userPrompt = `Téma: "${selectedTopic}"
 
-Vytvoř JEDNU UNIKÁTNÍ kvízovou otázku pro děti (6-12 let).
-
-⚠️ DŮLEŽITÉ: Buď KREATIVNÍ! Každá otázka musí být JINÁ než všechny předchozí.
-Vyhni se klišé jako "Jaká je největší/nejmenší/nejrychlejší...".
+Vytvoř JEDNU vědomostní kvízovou otázku pro děti (8-12 let).
 
 PŘÍKLADY DOBRÝCH OTÁZEK:
-- "Co používají medvědi k chytání ryb v řece?"
-- "Ve kterém filmu pes pomáhá zachránit dalmatiny?"
-- "Kolik nohou má pavouk?"
+✅ "Kolik nohou má pavouk?"
+✅ "Jak se jmenuje hlavní město České republiky?"
+✅ "Která planeta je nejblíže Slunci?"
+✅ "Kolik hráčů hraje v jednom fotbalovém týmu na hřišti?"
+✅ "Jak se jmenuje nejvyšší hora světa?"
+✅ "Ve které pohádce vystupuje dřevěný panáček Pinocchio?"
+✅ "Kolik centimetrů má jeden metr?"
+✅ "Jaké zvíře je největší na světě?"
 
-ZAKÁZANÉ FORMULACE:
-❌ "Jaké zvíře, například klokan..." (prozrazuje odpověď!)
-❌ "Která země v Evropě..." pokud je "Francie" odpověď
-❌ Opakující se vzorce otázek
+ZAKÁZANÉ OTÁZKY:
+❌ "Co by chtěl být míč?" (nesmyslné)
+❌ "Kdyby byla kočka člověkem..." (fantazie)
+❌ "Jaký je tvůj oblíbený..." (názor)
+❌ Otázky bez faktické odpovědi
 
 Formát odpovědi (POUZE JSON):
 {
-  "question": "Kreativní otázka pro děti",
+  "question": "Jednoduchá faktická otázka",
   "options": ["Odpověď A", "Odpověď B", "Odpověď C"],
   "correct": 0
 }`;

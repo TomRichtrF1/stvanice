@@ -213,6 +213,8 @@ export default function SpectatorView() {
     });
 
     socket.on('waiting_for_ready', () => {
+      // 🎬 DŮLEŽITÉ: NEMĚNÍME showResults! Výsledky zůstanou viditelné
+      // dokud nepřijde next_question
       setGameState(prev => prev ? { ...prev, phase: 'waiting_for_ready' } : null);
     });
 
@@ -498,9 +500,9 @@ export default function SpectatorView() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4">
-      <div className="max-w-2xl mx-auto space-y-4">
+      <div className="max-w-6xl mx-auto space-y-4">
         
-        {/* 🎬 NOVÝ Header s kódem a režimem */}
+        {/* 🎬 Header s kódem a režimem */}
         <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-4 py-2">
           <div className="flex items-center gap-2">
             <Eye className="w-5 h-5 text-purple-500" />
@@ -511,172 +513,185 @@ export default function SpectatorView() {
           </span>
         </div>
 
-        {/* 🎬 NOVÉ: Logo ŠTVANICE */}
-        <div className="text-center py-2">
+        {/* 🎬 Logo ŠTVANICE - menší na wide screenech */}
+        <div className="text-center py-2 lg:py-1">
           <div className="flex justify-center mb-2">
-            <div className="relative bg-gradient-to-br from-orange-600 to-red-700 p-4 rounded-2xl shadow-xl shadow-orange-500/30 transform rotate-2 border-t border-orange-400/50 overflow-hidden">
+            <div className="relative bg-gradient-to-br from-orange-600 to-red-700 p-3 lg:p-2 rounded-2xl shadow-xl shadow-orange-500/30 transform rotate-2 border-t border-orange-400/50 overflow-hidden">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-yellow-400/20 to-transparent opacity-50"></div>
               <div className="flex items-center gap-1 relative z-10 transform -rotate-2">
-                <span className="text-3xl filter drop-shadow-lg transform scale-x-[-1]">🏃</span> 
+                <span className="text-2xl lg:text-xl filter drop-shadow-lg transform scale-x-[-1]">🏃</span> 
                 <div className="flex space-x-1 opacity-70">
                   <div className="w-1.5 h-1 bg-yellow-300 rounded-full animate-ping delay-75"></div>
                   <div className="w-1.5 h-1 bg-orange-300 rounded-full animate-ping delay-150"></div>
                 </div>
-                <span className="text-3xl filter drop-shadow-lg delay-100">👹</span> 
+                <span className="text-2xl lg:text-xl filter drop-shadow-lg delay-100">👹</span> 
               </div>
             </div>
           </div>
-          <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 tracking-tight">
+          <h1 className="text-2xl lg:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 tracking-tight">
             ŠTVANICE
           </h1>
         </div>
 
-        {/* Game Board */}
-        <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
+        {/* 🎬 RESPONZIVNÍ LAYOUT: Mobile = pod sebou, Desktop = vedle sebe */}
+        <div className="lg:flex lg:gap-6">
           
-          {/* Positions */}
-          <div className="space-y-2">
-            {/* START */}
-            <div className={`rounded-xl p-3 text-center border transition-all duration-500 ${displayHunterPos === 0 ? 'bg-red-900/50 border-red-500' : 'bg-red-900/30 border-red-500/30'}`}>
-              <div className="flex items-center justify-between px-2">
-                <span className="text-red-400 font-bold text-sm">START</span>
-                {displayHunterPos === 0 && (
-                  <span className="bg-red-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 animate-pulse">
-                    👹 LOVEC
-                  </span>
-                )}
-              </div>
-            </div>
-            
-            {/* Positions 1-7 */}
-            {[1, 2, 3, 4, 5, 6, 7].map((pos) => {
-              const hunterHere = displayHunterPos === pos;
-              const preyHere = displayPreyPos === pos;
+          {/* Game Board - vlevo na desktopu */}
+          <div className="lg:w-1/2">
+            <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
               
-              return (
-                <div 
-                  key={pos}
-                  className={`rounded-xl p-3 flex items-center justify-between transition-all duration-500 ${
-                    hunterHere || preyHere 
-                      ? 'bg-slate-700 border-2 border-cyan-500/50' 
-                      : 'bg-slate-900/50 border border-slate-700/50'
-                  }`}
-                >
-                  <span className="text-slate-500 font-bold">{pos}</span>
-                  <div className="flex gap-2">
-                    {hunterHere && (
-                      <span className="bg-red-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 transition-all duration-500">
+              {/* Positions */}
+              <div className="space-y-2">
+                {/* START */}
+                <div className={`rounded-xl p-3 text-center border transition-all duration-500 ${displayHunterPos === 0 ? 'bg-red-900/50 border-red-500' : 'bg-red-900/30 border-red-500/30'}`}>
+                  <div className="flex items-center justify-between px-2">
+                    <span className="text-red-400 font-bold text-sm">START</span>
+                    {displayHunterPos === 0 && (
+                      <span className="bg-red-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 animate-pulse">
                         👹 LOVEC
                       </span>
                     )}
-                    {preyHere && (
-                      <span className="bg-green-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 transition-all duration-500">
+                  </div>
+                </div>
+                
+                {/* Positions 1-7 */}
+                {[1, 2, 3, 4, 5, 6, 7].map((pos) => {
+                  const hunterHere = displayHunterPos === pos;
+                  const preyHere = displayPreyPos === pos;
+                  
+                  return (
+                    <div 
+                      key={pos}
+                      className={`rounded-xl p-3 flex items-center justify-between transition-all duration-500 ${
+                        hunterHere || preyHere 
+                          ? 'bg-slate-700 border-2 border-cyan-500/50' 
+                          : 'bg-slate-900/50 border border-slate-700/50'
+                      }`}
+                    >
+                      <span className="text-slate-500 font-bold">{pos}</span>
+                      <div className="flex gap-2">
+                        {hunterHere && (
+                          <span className="bg-red-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 transition-all duration-500">
+                            👹 LOVEC
+                          </span>
+                        )}
+                        {preyHere && (
+                          <span className="bg-green-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 transition-all duration-500">
+                            🏃 ŠTVANEC
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                {/* CÍL */}
+                <div className={`rounded-xl p-3 text-center border transition-all duration-500 ${displayPreyPos >= 8 ? 'bg-green-900/50 border-green-500' : 'bg-green-900/30 border-green-500/30'}`}>
+                  <div className="flex items-center justify-between px-2">
+                    <span className="text-green-400 font-bold text-sm">CÍL</span>
+                    {displayPreyPos >= 8 && (
+                      <span className="bg-green-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
                         🏃 ŠTVANEC
                       </span>
                     )}
                   </div>
                 </div>
-              );
-            })}
-            
-            {/* CÍL */}
-            <div className={`rounded-xl p-3 text-center border transition-all duration-500 ${displayPreyPos >= 8 ? 'bg-green-900/50 border-green-500' : 'bg-green-900/30 border-green-500/30'}`}>
-              <div className="flex items-center justify-between px-2">
-                <span className="text-green-400 font-bold text-sm">CÍL</span>
-                {displayPreyPos >= 8 && (
-                  <span className="bg-green-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
-                    🏃 ŠTVANEC
-                  </span>
-                )}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Question */}
-        {gameState.phase === 'playing' && gameState.currentQuestion && (
-          <div className="bg-slate-800/80 rounded-2xl p-6 border border-slate-700 space-y-4">
+          {/* Question panel - vpravo na desktopu */}
+          <div className="lg:w-1/2 mt-4 lg:mt-0">
             
-            {/* Question text */}
-            <div className="text-center">
-              <p className="text-white text-xl font-bold">{gameState.currentQuestion.question}</p>
-            </div>
-            
-            {/* Options */}
-            <div className="space-y-3">
-              {gameState.currentQuestion.options.map((option, index) => {
-                const hunterChose = hunterAnswer === index;
-                const preyChose = preyAnswer === index;
-                const isCorrect = showResults && correctAnswer === index;
-                const isWrong = showResults && (hunterChose || preyChose) && correctAnswer !== index;
+            {/* 🎬 OPRAVENO: Zobraz otázku i výsledky i během waiting_for_ready */}
+            {(gameState.phase === 'playing' || (gameState.phase === 'waiting_for_ready' && showResults)) && gameState.currentQuestion && (
+              <div className="bg-slate-800/80 rounded-2xl p-6 border border-slate-700 space-y-4">
                 
-                return (
-                  <div 
-                    key={index}
-                    className={`rounded-xl p-4 flex items-center justify-between transition-all duration-300 ${
-                      isCorrect ? 'bg-green-600 border-2 border-green-400' :
-                      isWrong ? 'bg-red-900/50 border-2 border-red-500/50' :
-                      (hunterChose || preyChose) ? 'bg-slate-700 border-2 border-cyan-500/50' :
-                      'bg-slate-900/50 border border-slate-700'
-                    }`}
-                  >
-                    <span className={`font-bold ${isCorrect ? 'text-white' : 'text-slate-300'}`}>
-                      {option}
-                    </span>
+                {/* Question text */}
+                <div className="text-center">
+                  <p className="text-white text-xl font-bold">{gameState.currentQuestion.question}</p>
+                </div>
+                
+                {/* Options */}
+                <div className="space-y-3">
+                  {gameState.currentQuestion.options.map((option, index) => {
+                    const hunterChose = hunterAnswer === index;
+                    const preyChose = preyAnswer === index;
+                    const isCorrect = showResults && correctAnswer === index;
+                    const isWrong = showResults && (hunterChose || preyChose) && correctAnswer !== index;
                     
-                    <div className="flex gap-2">
-                      {hunterChose && (
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
-                          showResults ? (isCorrect ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200') : 'bg-red-600 text-white'
-                        }`}>
-                          👹 {showResults && (isCorrect ? <Check size={12}/> : <X size={12}/>)}
+                    return (
+                      <div 
+                        key={index}
+                        className={`rounded-xl p-4 flex items-center justify-between transition-all duration-300 ${
+                          isCorrect ? 'bg-green-600 border-2 border-green-400' :
+                          isWrong ? 'bg-red-900/50 border-2 border-red-500/50' :
+                          (hunterChose || preyChose) ? 'bg-slate-700 border-2 border-cyan-500/50' :
+                          'bg-slate-900/50 border border-slate-700'
+                        }`}
+                      >
+                        <span className={`font-bold ${isCorrect ? 'text-white' : 'text-slate-300'}`}>
+                          {option}
                         </span>
-                      )}
-                      {preyChose && (
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
-                          showResults ? (isCorrect ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200') : 'bg-green-600 text-white'
-                        }`}>
-                          🏃 {showResults && (isCorrect ? <Check size={12}/> : <X size={12}/>)}
-                        </span>
-                      )}
-                      {isCorrect && !hunterChose && !preyChose && (
-                        <span className="text-green-200 text-xs font-bold">✓ SPRÁVNĚ</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            
-            {/* Status */}
-            <div className="text-center pt-2">
-              {hunterAnswer === null && preyAnswer === null && (
-                <p className="text-slate-400 flex items-center justify-center gap-2">
-                  <Clock className="w-4 h-4 animate-pulse" />
-                  Čekám na odpovědi hráčů...
-                </p>
-              )}
-              {hunterAnswer !== null && preyAnswer === null && (
-                <p className="text-slate-400">👹 Lovec odpověděl, čekám na Štvance...</p>
-              )}
-              {hunterAnswer === null && preyAnswer !== null && (
-                <p className="text-slate-400">🏃 Štvanec odpověděl, čekám na Lovce...</p>
-              )}
-              {showResults && (
-                <p className="text-cyan-400 font-bold animate-pulse">Další otázka přichází...</p>
-              )}
-            </div>
-          </div>
-        )}
+                        
+                        <div className="flex gap-2">
+                          {hunterChose && (
+                            <span className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
+                              showResults ? (isCorrect ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200') : 'bg-red-600 text-white'
+                            }`}>
+                              👹 {showResults && (isCorrect ? <Check size={12}/> : <X size={12}/>)}
+                            </span>
+                          )}
+                          {preyChose && (
+                            <span className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
+                              showResults ? (isCorrect ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200') : 'bg-green-600 text-white'
+                            }`}>
+                              🏃 {showResults && (isCorrect ? <Check size={12}/> : <X size={12}/>)}
+                            </span>
+                          )}
+                          {isCorrect && !hunterChose && !preyChose && (
+                            <span className="text-green-200 text-xs font-bold">✓ SPRÁVNĚ</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Status */}
+                <div className="text-center pt-2">
+                  {!showResults && hunterAnswer === null && preyAnswer === null && (
+                    <p className="text-slate-400 flex items-center justify-center gap-2">
+                      <Clock className="w-4 h-4 animate-pulse" />
+                      Čekám na odpovědi hráčů...
+                    </p>
+                  )}
+                  {!showResults && hunterAnswer !== null && preyAnswer === null && (
+                    <p className="text-slate-400">👹 Lovec odpověděl, čekám na Štvance...</p>
+                  )}
+                  {!showResults && hunterAnswer === null && preyAnswer !== null && (
+                    <p className="text-slate-400">🏃 Štvanec odpověděl, čekám na Lovce...</p>
+                  )}
+                  {showResults && (
+                    <p className="text-cyan-400 font-bold animate-pulse">
+                      ✓ Vyhodnoceno • Čekám na hráče...
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
-        {/* Waiting for ready */}
-        {gameState.phase === 'waiting_for_ready' && (
-          <div className="bg-slate-800/80 rounded-2xl p-6 border border-slate-700 text-center">
-            <Loader className="w-12 h-12 text-cyan-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-xl font-bold">Připravuji další otázku...</p>
-            <p className="text-slate-400 mt-2">Hráči potvrzují připravenost</p>
+            {/* Waiting for ready - POUZE pokud NEMÁME výsledky k zobrazení */}
+            {gameState.phase === 'waiting_for_ready' && !showResults && (
+              <div className="bg-slate-800/80 rounded-2xl p-6 border border-slate-700 text-center">
+                <Loader className="w-12 h-12 text-cyan-500 animate-spin mx-auto mb-4" />
+                <p className="text-white text-xl font-bold">Připravuji další otázku...</p>
+                <p className="text-slate-400 mt-2">Hráči potvrzují připravenost</p>
+              </div>
+            )}
+
           </div>
-        )}
+        </div>
 
       </div>
     </div>
