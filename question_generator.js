@@ -342,6 +342,72 @@ function getRecentEntitiesForPrompt() {
   return `\nNEPOUŽÍVEJ tyto entity (již byly použity): ${uniqueEntities.join(", ")}`;
 }
 
+// === 🛡️ VRSTVA 1: FILTR DUPLICITNÍCH ODPOVĚDÍ ===
+
+/**
+ * Odfiltruje otázky se stejnou správnou odpovědí
+ */
+function filterDuplicateAnswers(questions) {
+  const seenAnswers = new Set();
+  const filtered = [];
+  
+  for (const q of questions) {
+    const correctAnswer = q.options[q.correct].toLowerCase().trim();
+    
+    if (seenAnswers.has(correctAnswer)) {
+      console.log(`⚠️ Duplicitní odpověď odfiltrována: "${correctAnswer}"`);
+      continue; // Přeskoč duplicitu
+    }
+    
+    seenAnswers.add(correctAnswer);
+    filtered.push(q);
+  }
+  
+  return filtered;
+}
+
+// === 🛡️ VRSTVA 2: FILTR PODOBNÝCH OTÁZEK ===
+
+/**
+ * Odfiltruje otázky s příliš podobným textem
+ */
+function filterSimilarQuestions(questions, threshold = 0.5) {
+  const dominated = new Set(); // Indexy otázek k odstranění
+  
+  for (let i = 0; i < questions.length; i++) {
+    if (dominated.has(i)) continue;
+    
+    const words1 = new Set(
+      questions[i].question.toLowerCase()
+        .split(/\s+/)
+        .filter(w => w.length > 3)
+    );
+    
+    for (let j = i + 1; j < questions.length; j++) {
+      if (dominated.has(j)) continue;
+      
+      const words2 = new Set(
+        questions[j].question.toLowerCase()
+          .split(/\s+/)
+          .filter(w => w.length > 3)
+      );
+      
+      if (words1.size === 0 || words2.size === 0) continue;
+      
+      // Spočítej překryv
+      const intersection = [...words1].filter(w => words2.has(w)).length;
+      const similarity = intersection / Math.min(words1.size, words2.size);
+      
+      if (similarity > threshold) {
+        console.log(`⚠️ Podobné otázky [${i+1}] ~ [${j+1}] (${(similarity*100).toFixed(0)}%) - odstraňuji druhou`);
+        dominated.add(j); // Odstraň tu druhou
+      }
+    }
+  }
+  
+  return questions.filter((_, i) => !dominated.has(i));
+}
+
 // === 🚀 BATCH GENEROVÁNÍ - ZDARMA REŽIM ===
 
 /**
@@ -374,6 +440,10 @@ ${aspectList}
 - NIKDY NEOPAKUJ stejnou osobu, zemi, nebo místo ve více otázkách
 - NIKDY NEPOUŽÍVEJ stejnou entitu dvakrát
 ${getRecentEntitiesForPrompt()}
+
+# KRITICKÉ PRAVIDLO - UNIKÁTNÍ ODPOVĚDI
+⚠️ KAŽDÁ otázka MUSÍ mít JINOU správnou odpověď!
+⚠️ Nikdy negeneruj dvě otázky kde odpověď je stejná entita
 
 # PRAVIDLA KVALITY
 - Otázky musí být fakticky správné
@@ -424,6 +494,14 @@ KAŽDÁ otázka MUSÍ pokrývat JINÝ aspekt tématu!
 - NIKDY NEOPAKUJ stejné místo ve více než 1 otázce
 - NIKDY NEOPAKUJ stejný rok ve více než 1 otázce
 ${getRecentEntitiesForPrompt()}
+
+# KRITICKÉ PRAVIDLO - UNIKÁTNÍ ODPOVĚDI
+⚠️ KAŽDÁ otázka MUSÍ mít JINOU správnou odpověď!
+⚠️ Nikdy negeneruj dvě otázky se stejným tématem (např. dvě o cenách/ocenění)
+⚠️ Příklad CO NEDĚLAT:
+   ❌ Otázka 1: "Která filmová cena je nejprestižnější?" → Oscar
+   ❌ Otázka 2: "Jaké ocenění je v Hollywoodu nejvýznamnější?" → Oscar
+   (Obě jsou o stejném tématu a mají stejnou odpověď - ZAKÁZÁNO!)
 
 # PRAVIDLA KVALITY
 - Otázky musí být fakticky správné
@@ -530,7 +608,7 @@ async function callGroqBatch(systemPrompt, userPrompt, mode, maxRetries = 5) {
       }
       
       // Validace jednotlivých otázek
-      const validQuestions = parsed.questions.filter(q => 
+      let validQuestions = parsed.questions.filter(q => 
         q.question && 
         q.options && 
         Array.isArray(q.options) && 
@@ -542,8 +620,24 @@ async function callGroqBatch(systemPrompt, userPrompt, mode, maxRetries = 5) {
       
       console.log(`📊 Validních otázek: ${validQuestions.length}/${parsed.questions.length}`);
       
+      // 🛡️ VRSTVA 1: Filtruj duplicitní odpovědi
+      const beforeDuplicates = validQuestions.length;
+      validQuestions = filterDuplicateAnswers(validQuestions);
+      if (validQuestions.length < beforeDuplicates) {
+        console.log(`🛡️ Vrstva 1: Odstraněno ${beforeDuplicates - validQuestions.length} duplicitních odpovědí`);
+      }
+      
+      // 🛡️ VRSTVA 2: Filtruj podobné otázky
+      const beforeSimilar = validQuestions.length;
+      validQuestions = filterSimilarQuestions(validQuestions, 0.5);
+      if (validQuestions.length < beforeSimilar) {
+        console.log(`🛡️ Vrstva 2: Odstraněno ${beforeSimilar - validQuestions.length} podobných otázek`);
+      }
+      
+      console.log(`📊 Po filtraci duplicit: ${validQuestions.length} otázek`);
+      
       if (validQuestions.length < 8) {
-        throw new Error(`Příliš málo validních otázek: ${validQuestions.length}`);
+        throw new Error(`Příliš málo unikátních otázek: ${validQuestions.length}`);
       }
       
       // Přidej do historie
