@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { UserPlus, Users } from 'lucide-react';
+import { UserPlus, Users, HelpCircle } from 'lucide-react';
 
 interface LobbyProps {
   onCreateGame: () => void;
@@ -57,7 +57,7 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
               Napínavá vědomostní hra pro dva
             </p>
             <p className="text-slate-500 text-xs font-medium tracking-wider">
-              REŽIM: DOSPĚLÝ / JUNIOR • DIVÁCKÁ MÍSTNOST PRO FANDĚNÍ
+              REŽIM: DOSPĚLÍ / JUNIOR • DIVÁCKÁ MÍSTNOST PRO FANDĚNÍ
             </p>
           </div>
         </div>
@@ -65,6 +65,20 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
         {/* Hlavní menu */}
         {!showJoinInput ? (
           <div className="space-y-4">
+            {/* ❓ TLAČÍTKO JAK HRÁT - NOVÉ */}
+            <a
+              href="/faq"
+              className="group w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-4 px-8 rounded-2xl text-lg shadow-xl shadow-purple-900/30 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-between border border-purple-500/20"
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 p-2 rounded-xl group-hover:bg-white/30 transition-colors shadow-inner">
+                  <HelpCircle size={24} className="text-white" />
+                </div>
+                <span className="tracking-wide drop-shadow-sm">JAK HRÁT?</span>
+              </div>
+              <div className="text-purple-100 text-sm font-semibold bg-purple-700/30 px-3 py-1 rounded-full">Pravidla</div>
+            </a>
+
             <button
               onClick={onCreateGame}
               className="group w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold py-6 px-8 rounded-2xl text-xl shadow-xl shadow-green-900/30 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-between border border-green-500/20"
@@ -145,9 +159,17 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
         )}
       </div>
       
-      {/* Footer */}
-      <div className="absolute bottom-6 text-slate-600 text-xs font-mono opacity-50 hover:opacity-100 transition-opacity">
-        ŠTVANICE ONLINE (beta) • Kvízová hra pro dva
+      {/* Footer s FAQ odkazem */}
+      <div className="absolute bottom-6 text-center space-y-2">
+        <a 
+          href="/faq" 
+          className="text-slate-500 hover:text-cyan-400 text-xs transition-colors"
+        >
+          ❓ Pravidla hry
+        </a>
+        <div className="text-slate-600 text-xs font-mono opacity-50 hover:opacity-100 transition-opacity">
+          ŠTVANICE ONLINE (beta) • Kvízová hra pro dva
+        </div>
       </div>
     </div>
   );

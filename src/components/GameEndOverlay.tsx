@@ -1,4 +1,4 @@
-import { Trophy, Frown, RefreshCw, Home } from 'lucide-react';
+import { Trophy, Frown, RefreshCw, Home, HelpCircle } from 'lucide-react';
 
 interface GameEndOverlayProps {
   winner: 'hunter' | 'prey';
@@ -69,6 +69,17 @@ export default function GameEndOverlay({ winner, myRole, onRestart }: GameEndOve
              <Home className="w-6 h-6 group-hover:-translate-y-1 transition-transform duration-300" />
             <span>Založit novou hru</span>
           </button>
+        </div>
+
+        {/* ❓ FAQ odkaz - NOVÉ */}
+        <div className="pt-4">
+          <a
+            href="/faq"
+            className="inline-flex items-center gap-2 text-slate-500 hover:text-cyan-400 text-sm transition-colors"
+          >
+            <HelpCircle size={14} />
+            <span>Jak hra funguje?</span>
+          </a>
         </div>
       </div>
     </div>

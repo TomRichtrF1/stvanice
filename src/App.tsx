@@ -3,11 +3,12 @@ import { useSocket } from './contexts/SocketContext';
 import { useGameAudio } from './hooks/useGameAudio';
 import Lobby from './components/Lobby';
 import WaitingRoom from './components/WaitingRoom';
-import TopicSelection from './components/TopicSelection'; // ✅ NOVÝ IMPORT
+import TopicSelection from './components/TopicSelection';
 import RoleSelection from './components/RoleSelection';
 import HeadstartSelection from './components/HeadstartSelection';
 import GameBoard from './components/GameBoard';
-import SpectatorView from './components/SpectatorView'; // 🎬 NOVÝ IMPORT
+import SpectatorView from './components/SpectatorView';
+import FAQ from './components/FAQ'; // ❓ NOVÝ IMPORT
 import { AlertCircle } from 'lucide-react';
 
 type GamePhase = 'lobby' | 'waiting' | 'topic_selection' | 'role_selection' | 'headstart_selection' | 'playing' | 'finished';
@@ -25,6 +26,13 @@ interface Question {
 }
 
 function App() {
+  // ❓ FAQ ROUTING
+  // Pokud URL začíná /faq nebo /jak-hrat, zobraz FAQ
+  const isFAQMode = window.location.pathname.startsWith('/faq') || window.location.pathname.startsWith('/jak-hrat');
+  if (isFAQMode) {
+    return <FAQ />;
+  }
+
   // 🎬 SPECTATOR MODE ROUTING
   // Pokud URL začíná /divaci, zobraz SpectatorView
   const isSpectatorMode = window.location.pathname.startsWith('/divaci');
@@ -56,7 +64,7 @@ function App() {
     const shouldPlayAmbient = 
       phase === 'lobby' || 
       phase === 'waiting' || 
-      phase === 'topic_selection' || // ✅ PŘIDÁNO
+      phase === 'topic_selection' ||
       phase === 'role_selection' || 
       phase === 'headstart_selection';
 

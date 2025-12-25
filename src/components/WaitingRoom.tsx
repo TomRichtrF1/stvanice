@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Loader, Baby, Brain, Info } from 'lucide-react';
+import { Copy, Loader, Baby, Brain, Info, HelpCircle } from 'lucide-react';
 
 interface WaitingRoomProps {
   roomCode: string;
@@ -109,6 +109,17 @@ export default function WaitingRoom({ roomCode, socket }: WaitingRoomProps) {
                 ? 'Otázky pro děti 8-14 let (Pohádky, Zvířata, Sport...)' 
                 : 'Otázky pro dospělé (Věda, Historie, Kultura...)'}
             </p>
+          </div>
+
+          {/* ❓ FAQ ODKAZ - NOVÉ */}
+          <div className="pt-4">
+            <a
+              href="/faq"
+              className="inline-flex items-center gap-2 text-slate-500 hover:text-cyan-400 text-sm transition-colors"
+            >
+              <HelpCircle size={14} />
+              <span>Nevíš jak hrát? Přečti si pravidla</span>
+            </a>
           </div>
 
         </div>

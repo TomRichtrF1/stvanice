@@ -1,36 +1,301 @@
-import OpenAI from 'openai';
+import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// === 🔧 GROQ KONFIGURACE ===
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
-// === 🧠 PAMĚŤ NEDÁVNÝCH OTÁZEK (Anti-repeat) ===
-const recentQuestions = [];
-const recentEntities = []; // Paměť pro jména, osoby, místa
-const MAX_HISTORY = 50; // Pamatuj 50 otázek (cca 4+ hodiny hraní)
-const MAX_ENTITY_HISTORY = 100; // Pamatuj 100 entit (Francie, Praha, Einstein...)
+const MODEL = "llama-3.3-70b-versatile";
 
+// === 🧠 PAMĚŤ PRO ANTI-REPEAT (10 batchů = 120 otázek) ===
+const recentQuestions = [];
+const recentEntities = [];
+const MAX_QUESTION_HISTORY = 120;
+const MAX_ENTITY_HISTORY = 200;
+
+// === 📦 CACHE PRO BATCH OTÁZKY ===
+let questionCache = [];
+
+// === 🎯 KATEGORIE A ASPEKTY - ADULT ===
+const ADULT_CATEGORIES = {
+  "motorsport": {
+    name: "Motorsport",
+    aspects: [
+      "Historický moment",
+      "Konkrétní okruh (trať)",
+      "Kuriozita nebo zajímavost",
+      "Tým nebo stáj",
+      "Pravidlo nebo kontroverzní rozhodnutí",
+      "Rekord",
+      "Slavný souboj dvou závodníků",
+      "Nehoda nebo drama",
+      "Šampionát konkrétního roku",
+      "Technický prvek vozu",
+      "Sponzoři a byznys",
+      "Legendární závodník a jeho kariéra"
+    ]
+  },
+  "team_sports": {
+    name: "Týmové sporty",
+    aspects: [
+      "Historický moment nebo zápas",
+      "Stadion nebo aréna",
+      "Kuriozita nebo zajímavost",
+      "Klub nebo tým",
+      "Pravidlo nebo kontroverzní rozhodnutí",
+      "Rekord individuální nebo týmový",
+      "Slavné rivalství",
+      "Přestup nebo transfer",
+      "Mistrovství nebo turnaj konkrétního roku",
+      "Trenér nebo manažer",
+      "Národní tým",
+      "Legendární hráč a jeho kariéra"
+    ]
+  },
+  "film": {
+    name: "Film a seriály",
+    aspects: [
+      "Historický milník kinematografie",
+      "Herec nebo herečka",
+      "Kuriozita ze zákulisí natáčení",
+      "Režisér",
+      "Ocenění Oscar nebo Zlatý glóbus",
+      "Rekord v tržbách nebo délce",
+      "Slavná filmová dvojice nebo rivalita",
+      "Kontroverzní moment nebo skandál",
+      "Konkrétní film a jeho detaily",
+      "Hudba nebo soundtrack",
+      "Filmové studio nebo produkce",
+      "Adaptace knihy na film"
+    ]
+  },
+  "music": {
+    name: "Hudba",
+    aspects: [
+      "Historický milník",
+      "Zpěvák nebo zpěvačka",
+      "Kuriozita nebo zajímavost",
+      "Kapela nebo hudební skupina",
+      "Ocenění Grammy nebo Brit Awards",
+      "Rekord v prodejích nebo koncertech",
+      "Slavná spolupráce nebo rivalita",
+      "Kontroverzní moment nebo skandál",
+      "Konkrétní album nebo píseň",
+      "Hudební nástroj nebo produkce",
+      "Hudební žánr a jeho historie",
+      "Koncert nebo turné"
+    ]
+  },
+  "history": {
+    name: "Historie",
+    aspects: [
+      "Klíčová událost nebo bitva",
+      "Místo nebo lokalita",
+      "Kuriozita nebo málo známý fakt",
+      "Významná osobnost",
+      "Politické rozhodnutí nebo smlouva",
+      "První nebo poslední svého druhu",
+      "Rivalita nebo konflikt dvou stran",
+      "Tragédie nebo katastrofa",
+      "Konkrétní rok nebo období",
+      "Vynález nebo technologie té doby",
+      "Kultura a umění období",
+      "Důsledky události pro dnešek"
+    ]
+  },
+  "geography": {
+    name: "Zeměpis",
+    aspects: [
+      "Hlavní město",
+      "Řeka nebo jezero",
+      "Kuriozita nebo zajímavost",
+      "Hora nebo pohoří",
+      "Hranice nebo sousední země",
+      "Rekord největší nejmenší nejvyšší",
+      "Historická souvislost místa",
+      "Přírodní úkaz nebo památka",
+      "Obyvatelstvo nebo jazyk",
+      "Vlajka nebo symbol",
+      "Ekonomika nebo průmysl",
+      "Slavná osobnost z dané země"
+    ]
+  },
+  "science": {
+    name: "Věda a technologie",
+    aspects: [
+      "Historický objev",
+      "Vědec nebo vynálezce",
+      "Kuriozita nebo paradox",
+      "Instituce nebo laboratoř",
+      "Teorie nebo zákon",
+      "Rekord první největší nejmenší",
+      "Rivalita nebo závod",
+      "Nehoda nebo selhání",
+      "Konkrétní rok nebo experiment",
+      "Praktická aplikace v životě",
+      "Nobelova cena",
+      "Budoucnost a predikce"
+    ]
+  },
+  "food": {
+    name: "Gastronomie",
+    aspects: [
+      "Historický původ pokrmu",
+      "Země nebo region",
+      "Kuriozita nebo zajímavost",
+      "Ingredience nebo surovina",
+      "Tradiční příprava nebo recept",
+      "Rekord nejdražší největší",
+      "Slavný šéfkuchař nebo restaurace",
+      "Kontroverzní jídlo nebo trend",
+      "Národní pokrm konkrétní země",
+      "Nápoj víno pivo káva",
+      "Michelin a ocenění",
+      "Jídlo v popkultuře"
+    ]
+  }
+};
+
+// === 🎯 KATEGORIE A ASPEKTY - JUNIOR ===
+const JUNIOR_CATEGORIES = {
+  "animals": {
+    name: "Zvířata",
+    aspects: [
+      "Savci",
+      "Ptáci",
+      "Mořští živočichové",
+      "Hmyz",
+      "Domácí mazlíčci",
+      "Zvířata v ZOO",
+      "Kde žijí a biotopy",
+      "Co jedí",
+      "Rekordy největší nejrychlejší",
+      "Zvířata z pohádek",
+      "Mláďata a jak se jmenují",
+      "Zvuky zvířat"
+    ]
+  },
+  "fairytales": {
+    name: "Pohádky a filmy",
+    aspects: [
+      "České pohádky",
+      "Disney postavy",
+      "Pixar filmy",
+      "Kouzelné předměty",
+      "Záporáci",
+      "Princezny a princové",
+      "Zvířecí hrdinové",
+      "Písničky z pohádek",
+      "Kde se odehrává",
+      "Jak to končí",
+      "Kdo napsal nebo natočil",
+      "Kamarádi hlavního hrdiny"
+    ]
+  },
+  "body": {
+    name: "Lidské tělo",
+    aspects: [
+      "Kosti a kostra",
+      "Orgány",
+      "Smysly pět smyslů",
+      "Svaly",
+      "Co jíme a výživa",
+      "Zdraví a hygiena",
+      "Jak rosteme",
+      "Zajímavosti o těle",
+      "Co dělá mozek",
+      "Srdce a krev",
+      "Zuby",
+      "Spánek"
+    ]
+  },
+  "world": {
+    name: "Svět kolem nás",
+    aspects: [
+      "Hlavní města",
+      "Kontinenty",
+      "Oceány a moře",
+      "Vlajky",
+      "Jazyky",
+      "Slavné stavby",
+      "Zvířata podle kontinentů",
+      "Počasí a klima",
+      "Řeky",
+      "Hory",
+      "Ostrovy",
+      "Pouště a pralesy"
+    ]
+  },
+  "space": {
+    name: "Vesmír",
+    aspects: [
+      "Planety",
+      "Slunce",
+      "Měsíc",
+      "Hvězdy",
+      "Astronauti",
+      "Rakety a sondy",
+      "Galaxie",
+      "Zatmění",
+      "Komety",
+      "Souhvězdí",
+      "Vesmírné rekordy",
+      "Život ve vesmíru"
+    ]
+  },
+  "sports_kids": {
+    name: "Sport pro děti",
+    aspects: [
+      "Fotbal",
+      "Hokej",
+      "Plavání",
+      "Atletika běh skok",
+      "Olympijské hry",
+      "Pravidla her",
+      "Slavní sportovci",
+      "Míče a vybavení",
+      "Zimní sporty",
+      "Týmy a kluby",
+      "Rekordy",
+      "Sport ve škole"
+    ]
+  }
+};
+
+// === 🔀 POMOCNÉ FUNKCE ===
+
+/**
+ * Zamíchá pole (Fisher-Yates shuffle)
+ */
+function shuffleArray(array) {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
+ * Přidá otázku do historie pro anti-repeat
+ */
 function addToHistory(question) {
   recentQuestions.push(question.toLowerCase());
-  if (recentQuestions.length > MAX_HISTORY) {
-    recentQuestions.shift(); // Odstraň nejstarší
+  if (recentQuestions.length > MAX_QUESTION_HISTORY) {
+    recentQuestions.shift();
   }
   
-  // === 🆕 EXTRAHUJ A PAMATUJ SI ENTITY (jména, místa) ===
-  // Ignorujeme první slovo věty (vždy má velké písmeno)
+  // Extrahuj entity (jména, místa)
   const firstSpaceIndex = question.indexOf(' ');
   const withoutFirstWord = firstSpaceIndex > 0 ? question.substring(firstSpaceIndex + 1) : '';
-  
-  // Hledáme slova začínající velkým písmenem (min. 4 znaky = skutečná jména)
   const entities = withoutFirstWord.match(/\b[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]{3,}(?:\s+[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+)*/g);
   
   if (entities) {
     entities.forEach(entity => {
-      const lowerEntity = entity.toLowerCase();
-      recentEntities.push(lowerEntity);
+      recentEntities.push(entity.toLowerCase());
       if (recentEntities.length > MAX_ENTITY_HISTORY) {
         recentEntities.shift();
       }
@@ -38,421 +303,494 @@ function addToHistory(question) {
   }
 }
 
-function isQuestionUnique(question) {
-  const lowerQuestion = question.toLowerCase();
+/**
+ * Přidá celý batch do historie
+ */
+function addBatchToHistory(questions) {
+  questions.forEach(q => addToHistory(q.question));
+}
+
+/**
+ * Vybere 12 náhodných kombinací [kategorie + aspekt] napříč všemi kategoriemi
+ */
+function selectRandomCategoryAspectPairs(categories, count = 12) {
+  const allPairs = [];
   
-  // 1. Kontrola přesné shody
-  if (recentQuestions.includes(lowerQuestion)) {
-    console.log("⚠️ DUPLICITA: Přesná shoda s historií!");
-    return false;
-  }
-  
-  // 2. 🆕 KONTROLA OPAKOVANÝCH ENTIT (jména, osoby)
-  // Ignorujeme první slovo věty (vždy má velké písmeno)
-  const firstSpaceIndex = question.indexOf(' ');
-  const withoutFirstWord = firstSpaceIndex > 0 ? question.substring(firstSpaceIndex + 1) : '';
-  
-  const entities = withoutFirstWord.match(/\b[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]{3,}(?:\s+[A-ZČŘŠŽÝÁÍÉÚŮ][a-zčřšžýáíéúůěň]+)*/g);
-  
-  if (entities) {
-    for (const entity of entities) {
-      const lowerEntity = entity.toLowerCase();
-      // Počítáme kolikrát se entita objevila
-      const entityCount = recentEntities.filter(e => e === lowerEntity).length;
-      
-      if (entityCount >= 2) { // Zpřísněno: entita se může objevit max 1x během 25 otázek
-        console.log(`⚠️ DUPLICITA ENTITY: "${entity}" se již objevil ${entityCount}x!`);
-        return false;
-      }
+  // Vytvoř všechny možné páry [kategorie, aspekt]
+  for (const [catKey, catData] of Object.entries(categories)) {
+    for (const aspect of catData.aspects) {
+      allPairs.push({
+        categoryKey: catKey,
+        categoryName: catData.name,
+        aspect: aspect
+      });
     }
   }
   
-  // 3. Kontrola podobnosti (klíčová slova)
-  for (const oldQ of recentQuestions) {
-    const similarity = calculateSimilarity(lowerQuestion, oldQ);
-    if (similarity > 0.5) { // 50% podobnost = duplicita (zpřísněno z 70%)
-      console.log(`⚠️ DUPLICITA: ${(similarity * 100).toFixed(0)}% podobnost s předchozí otázkou!`);
-      return false;
-    }
-  }
-  
-  return true;
+  // Zamíchej a vyber prvních N
+  const shuffled = shuffleArray(allPairs);
+  return shuffled.slice(0, count);
 }
 
-function calculateSimilarity(str1, str2) {
-  const words1 = new Set(str1.split(/\s+/).filter(w => w.length > 3));
-  const words2 = new Set(str2.split(/\s+/).filter(w => w.length > 3));
+/**
+ * Formátuje seznam entit z historie pro prompt
+ */
+function getRecentEntitiesForPrompt() {
+  if (recentEntities.length === 0) return "";
   
-  if (words1.size === 0 || words2.size === 0) return 0;
-  
-  const intersection = new Set([...words1].filter(x => words2.has(x)));
-  return intersection.size / Math.max(words1.size, words2.size);
+  const uniqueEntities = [...new Set(recentEntities.slice(-50))];
+  return `\nNEPOUŽÍVEJ tyto entity (již byly použity): ${uniqueEntities.join(", ")}`;
 }
 
-// === 🎲 VYLEPŠENÁ DATABÁZE TÉMAT S VÁHAMI ===
-const weightedTopics = [
-  // SPORT (vysoká váha - populární)
-  ["Sport: Fotbal", 8],
-  ["Sport: Hokej", 6],
-  ["Sport: Basketbal", 4],
-  ["Sport: Tenis", 5],
-  ["Sport: Atletika", 4],
-  ["Sport: Zimní olympijské sporty", 4],
-  ["Sport: Letní olympijské sporty", 4],
-  ["Sport: Motorsport (F1, MotoGP)", 2],
-  ["Sport: Box a bojové sporty", 3],
-  
-  // PŘÍRODA & ZVÍŘATA (střední-vysoká váha)
-  ["Zvířata: Savci", 6],
-  ["Zvířata: Ptáci", 4],
-  ["Zvířata: Mořský svět", 5],
-  ["Zvířata: Dinosauři a vymřelá zvířata", 6],
-  ["Zvířata: Domácí mazlíčci", 5],
-  ["Příroda: Tropické deštné lesy", 3],
-  ["Příroda: Savany a pouště", 3],
-  ["Příroda: Hory a sopky", 4],
-  ["Příroda: Oceány a moře", 4],
-  ["Příroda: Flóra a fauna", 4],
-  
-  // ZEMĚPIS (vysoká váha - populární)
-  ["Zeměpis: Evropa", 7],
-  ["Zeměpis: Asie", 5],
-  ["Zeměpis: Amerika", 5],
-  ["Zeměpis: Afrika", 4],
-  ["Zeměpis: Hlavní města světa", 7],
-  ["Zeměpis: Řeky a jezera", 4],
-  ["Zeměpis: Hory a pohoří", 4],
-  
-  // HISTORIE (střední váha)
-  ["Historie: Starověk (Egypt, Řím, Řecko)", 5],
-  ["Historie: Středověk a rytíři", 5],
-  ["Historie: Vikingové", 4],
-  ["Historie: Moderní historie", 4],
-  ["Historie: Piráti", 5],
-  ["Historie: První a Druhá světová válka", 4],
-  ["Historie: České dějiny", 6],
-  ["Historie: Starověké civilizace (Mayové, Aztékové)", 3],
-  ["Historie: Titanic a slavné lodě", 4],
-  
-  // FILM & ZÁBAVA (velmi vysoká váha - populární!)
-  ["Film: Hollywoodská kinematografie", 8],
-  ["Film: Slavné filmy a seriály", 7],
-  ["Popkultura: Videohry", 6],
-  ["Popkultura: Komiksy a superhrdiny", 6],
-  ["Popkultura: YouTube a internet", 5],
-  ["Popkultura: Anime a manga", 2],
-  
-  // HUDBA (střední-vysoká váha)
-  ["Hudba: Rock a pop", 6],
-  ["Hudba: Hip hop a rap", 4],
-  ["Hudba: Klasická hudba", 3],
-  ["Hudba: Slavné kapely a zpěváci", 6],
-  ["Hudba: Hudební nástroje", 4],
-  ["Hudba: Hudební historie", 3],
-  
-  // VĚDA (střední váha)
-  ["Vesmír: Planety sluneční soustavy", 6],
-  ["Vesmír: Hvězdy a galaxie", 4],
-  ["Vesmír: Kosmonautika", 5],
-  ["Fyzika: Základní principy", 3],
-  ["Chemie: Chemické prvky", 3],
-  ["Biologie: Lidské tělo", 7],
-  ["Technologie: Historie internetu", 4],
-  ["Technologie: Umělá inteligence", 3],
-  ["Technologie: Mobilní telefony", 5],
-  
-  // GASTRONOMIE (střední váha)
-  ["Gastronomie: Evropská kuchyně", 7],
-  ["Gastronomie: Asijská kuchyně", 4],
-  ["Gastronomie: Fast food", 5],
-  ["Gastronomie: Sladkosti a čokoláda", 6],
-  ["Gastronomie: Pivo a víno", 4],
-  ["Gastronomie: Historie", 6],
-  
-  // UMĚNÍ & KULTURA (nižší váha)
-  ["Umění: Slavní malíři", 3],
-  ["Umění: Architektura", 3],
-  ["Literatura: Slavné knihy", 4],
-  ["Literatura: Pohádky", 5],
-  
-  // DOPRAVA (střední váha)
-  ["Doprava: Auta a automobilky", 5],
-  ["Doprava: Letadla", 4],
-  ["Doprava: Vlaky", 3],
-  ["Doprava: Lodě", 3],
-  ["Doprava: Historické vynálezy a průkopnické objevy", 4],
-  
-  // ZAJÍMAVOSTI (střední váha)
-  ["Mytologie: Řecká mytologie", 5],
-  ["Mytologie: Severská mytologie", 4],
-  ["Rekordy: Guinness World Records", 7],
-  ["UNESCO: Světové památky", 3],
-  ["Olympiáda: Olympijské hry", 4],
-  ["Co je zažito: Největší mýtusy a omyly", 7],
-];
+// === 🚀 BATCH GENEROVÁNÍ - ZDARMA REŽIM ===
 
-// === 🎰 FUNKCE PRO VÁŽENÝ NÁHODNÝ VÝBĚR ===
-function selectWeightedTopic() {
-  const totalWeight = weightedTopics.reduce((sum, [_, weight]) => sum + weight, 0);
-  let random = Math.random() * totalWeight;
+/**
+ * Generuje batch 12 otázek pro ZDARMA režim (mix napříč kategoriemi)
+ */
+async function generateFreeBatch(mode = 'adult') {
+  const categories = mode === 'kid' ? JUNIOR_CATEGORIES : ADULT_CATEGORIES;
+  const pairs = selectRandomCategoryAspectPairs(categories, 12);
   
-  for (const [topic, weight] of weightedTopics) {
-    random -= weight;
-    if (random <= 0) {
-      return topic;
-    }
-  }
+  console.log(`\n📦 BATCH GENEROVÁNÍ - ZDARMA ${mode.toUpperCase()}`);
+  console.log(`🎲 Vybrané kombinace:`);
+  pairs.forEach((p, i) => console.log(`   ${i + 1}. ${p.categoryName} → ${p.aspect}`));
   
-  return weightedTopics[0][0];
-}
+  // Formátuj aspekty pro prompt
+  const aspectList = pairs.map((p, i) => `${i + 1}. Kategorie "${p.categoryName}" - Aspekt: "${p.aspect}"`).join("\n");
+  
+  const systemPrompt = mode === 'kid' 
+    ? buildJuniorSystemPrompt() 
+    : buildAdultSystemPrompt();
+  
+  const userPrompt = `
+# ÚKOL
+Vygeneruj PŘESNĚ 12 kvízových otázek. Každá otázka MUSÍ odpovídat zadané kategorii a aspektu.
 
-// === 🛡️ VALIDACE ANTI-SPOILER ===
-function containsSpoiler(question, options) {
-  const lowerQuestion = question.toLowerCase();
-  
-  for (const option of options) {
-    const lowerOption = option.toLowerCase();
-    const words = lowerOption.split(/\s+/);
-    
-    for (const word of words) {
-      if (word.length > 4 && lowerQuestion.includes(word)) {
-        console.log(`⚠️ SPOILER DETECTED: "${word}" v otázce!`);
-        return true;
-      }
-    }
-  }
-  
-  return false;
-}
+# ZADÁNÍ (12 kombinací kategorie + aspekt)
+${aspectList}
 
-// === 🎯 FALLBACK OTÁZKY ===
-const fallbackQuestions = {
-  adult: [
-    { 
-      question: 'Který prvek má chemickou značku "Au"?', 
-      options: ['Stříbro', 'Zlato', 'Měď'], 
-      correct: 1 
-    },
-    { 
-      question: 'Ve kterém roce padla Berlínská zeď?', 
-      options: ['1987', '1989', '1991'], 
-      correct: 1 
-    },
-  ],
-  kid: [
-    { 
-      question: 'Jakou barvu má slunce?', 
-      options: ['Modrou', 'Žlutou', 'Zelenou'], 
-      correct: 1 
-    },
+# KRITICKÁ PRAVIDLA DIVERZITY
+- KAŽDÁ otázka MUSÍ být o JINÉM tématu
+- NIKDY NEOPAKUJ stejnou osobu, zemi, nebo místo ve více otázkách
+- NIKDY NEPOUŽÍVEJ stejnou entitu dvakrát
+${getRecentEntitiesForPrompt()}
+
+# PRAVIDLA KVALITY
+- Otázky musí být fakticky správné
+- Odpovědi maximálně 4 slova
+- V otázce NIKDY nezmiňuj správnou odpověď
+- Všechny 3 možnosti musí být věrohodné
+
+# VÝSTUPNÍ FORMÁT (POUZE PLATNÝ JSON)
+{
+  "questions": [
+    {"question": "Text otázky 1", "options": ["A", "B", "C"], "correct": 0},
+    {"question": "Text otázky 2", "options": ["A", "B", "C"], "correct": 1},
+    ... (celkem 12 otázek)
   ]
-};
+}
 
-// === 🚀 HLAVNÍ GENERÁTOR OTÁZEK ===
-export async function generateQuestion(topic = 'general', mode = 'adult', maxRetries = 5) {
+ODPOVĚZ POUZE PLATNÝM JSON BEZ DALŠÍHO TEXTU.
+`;
+
+  return await callGroqBatch(systemPrompt, userPrompt, mode);
+}
+
+// === 🚀 BATCH GENEROVÁNÍ - PREMIUM REŽIM ===
+
+/**
+ * Generuje batch 12 otázek pro PREMIUM režim (jedno téma od uživatele)
+ */
+async function generatePremiumBatch(userTopic, mode = 'adult') {
+  console.log(`\n📦 BATCH GENEROVÁNÍ - PREMIUM ${mode.toUpperCase()}`);
+  console.log(`🎯 Uživatelské téma: "${userTopic}"`);
   
-  let selectedTopic = topic;
+  const systemPrompt = mode === 'kid' 
+    ? buildJuniorSystemPrompt() 
+    : buildAdultSystemPrompt();
   
-  if (topic === 'general') {
-    selectedTopic = selectWeightedTopic();
-    console.log(`🎲 Vážený výběr tématu: "${selectedTopic}"`);
-  } else {
-    console.log(`🎯 Uživatelské téma: "${selectedTopic}"`);
-  }
+  const userPrompt = `
+# ÚKOL
+Téma od uživatele: "${userTopic}"
 
-  // === 🎭 PERSONA A PROMPT PODLE REŽIMU ===
-  let systemPersona = "";
-  let userPrompt = "";
-  
-  if (mode === 'kid') {
-    console.log("👶 Režim: JUNIOR (8-12 let)");
-    
-    systemPersona = `Jsi tvůrce vědomostních kvízů pro děti 8-12 let (první stupeň ZŠ).
+Vygeneruj PŘESNĚ 12 kvízových otázek na toto téma.
 
-JAZYK: Piš VŽDY gramaticky správnou češtinou. Jednoduché, jasné věty.
+# KRITICKÁ PRAVIDLA DIVERZITY
+NEJPRVE identifikuj 12 různých ASPEKTŮ tohoto tématu.
+Například pro "Formula 1": jezdci, týmy, okruhy, pravidla, historie, technika, rekordy, nehody, šampionáty, rivality, kuriozity, byznys.
 
-TYPY OTÁZEK (střídej je):
-- Všeobecné znalosti (hlavní města, kontinenty, planety)
-- Přírodověda (zvířata, rostliny, lidské tělo)
-- Matematická logika (jednoduché počty, geometrie)
-- Sport (pravidla, známí sportovci, olympiáda)
-- Pohádky a filmy pro děti (Disney, české pohádky, Pixar)
-- Základy historie (dinosauři, rytíři, vynálezy)
-- Hudba (nástroje, známé písničky)
-- Zeměpis (řeky, hory, státy)
+KAŽDÁ otázka MUSÍ pokrývat JINÝ aspekt tématu!
+- NIKDY NEOPAKUJ stejnou osobu ve více než 1 otázce
+- NIKDY NEOPAKUJ stejné místo ve více než 1 otázce
+- NIKDY NEOPAKUJ stejný rok ve více než 1 otázce
+${getRecentEntitiesForPrompt()}
 
-PRAVIDLA:
-- Otázky musí mít FAKTICKOU odpověď (ne názory, ne fantazie)
-- ZAKÁZANÉ: filosofické otázky ("Co by chtěl být...", "Kdyby byl...")
-- ZAKÁZANÉ: abstraktní nebo nesmyslné otázky
-- Obtížnost: Co by mělo znát dítě na prvním stupni ZŠ
-- Otázky musí být ZAJÍMAVÉ a POUČNÉ
+# PRAVIDLA KVALITY
+- Otázky musí být fakticky správné
+- Odpovědi maximálně 4 slova
+- V otázce NIKDY nezmiňuj správnou odpověď
+- Všechny 3 možnosti musí být věrohodné
+- Variuj obtížnost (mix lehčích a těžších)
 
-KRITICKÉ: V otázce NIKDY nezmiňuj správnou odpověď!`;
-
-    userPrompt = `Téma: "${selectedTopic}"
-
-Vytvoř JEDNU vědomostní kvízovou otázku pro děti (8-12 let).
-
-PŘÍKLADY DOBRÝCH OTÁZEK:
-✅ "Kolik nohou má pavouk?"
-✅ "Jak se jmenuje hlavní město České republiky?"
-✅ "Která planeta je nejblíže Slunci?"
-✅ "Kolik hráčů hraje v jednom fotbalovém týmu na hřišti?"
-✅ "Jak se jmenuje nejvyšší hora světa?"
-✅ "Ve které pohádce vystupuje dřevěný panáček Pinocchio?"
-✅ "Kolik centimetrů má jeden metr?"
-✅ "Jaké zvíře je největší na světě?"
-
-ZAKÁZANÉ OTÁZKY:
-❌ "Co by chtěl být míč?" (nesmyslné)
-❌ "Kdyby byla kočka člověkem..." (fantazie)
-❌ "Jaký je tvůj oblíbený..." (názor)
-❌ Otázky bez faktické odpovědi
-❌ Sugestivní nápověda v odpovědích (např. "Který italský pokrm ve stylu těstovin..." s odpovědí "Těstoviny")
-
-Formát odpovědi (POUZE JSON):
+# VÝSTUPNÍ FORMÁT (POUZE PLATNÝ JSON)
 {
-  "question": "Jednoduchá faktická otázka",
-  "options": ["Odpověď A", "Odpověď B", "Odpověď C"],
-  "correct": 0
-}`;
+  "questions": [
+    {"question": "Text otázky 1", "options": ["A", "B", "C"], "correct": 0},
+    {"question": "Text otázky 2", "options": ["A", "B", "C"], "correct": 1},
+    ... (celkem 12 otázek)
+  ]
+}
 
-  } else {
-    console.log("👨‍🦳 Režim: DOSPĚLÝ");
-    
-    systemPersona = `Jsi profesionální autor otázek pro náročné pub kvízy.
+ODPOVĚZ POUZE PLATNÝM JSON BEZ DALŠÍHO TEXTU.
+`;
 
-POŽADOVANÁ OBTÍŽNOST: STŘEDNÍ až TĚŽŠÍ
-- Ne "Jaké je hlavní město Francie?" (příliš lehké)
-- Ano "Ve kterém městě se nachází slavná opera La Scala?" (vyžaduje znalost)
-- Ano "Který fotbalista získal Zlatý míč v roce 2018?" (konkrétní)
+  return await callGroqBatch(systemPrompt, userPrompt, mode);
+}
 
-Tvoje otázky musí:
-1. Testovat SKUTEČNÉ znalosti, ne jen hádat
-2. Být SPECIFICKÉ (přesný rok, jméno, místo)
-3. Obsahovat "fun facts" nebo překvapivé souvislosti
-4. Vyžadovat zamyšlení, ne intuici
+// === 📝 SYSTEM PROMPTY ===
 
-KRITICKÉ PRAVIDLO: Každá otázka musí být UNIKÁTNÍ! Vyhni se opakování.`;
+function buildAdultSystemPrompt() {
+  return `# ROLE
+Jsi profesionální autor otázek pro náročné pub kvízy.
 
-    userPrompt = `Téma: "${selectedTopic}"
+# JAZYK
+- Piš VŽDY gramaticky správnou češtinou
+- Používej české názvy kde je to běžné (Paříž, Londýn, Mnichov)
 
-Vytvoř JEDNU NÁROČNOU kvízovou otázku pro dospělé.
+# OBTÍŽNOST
+- STŘEDNÍ až TĚŽŠÍ
+- NE "Jaké je hlavní město Francie?" (příliš lehké)
+- ANO "Ve kterém městě se nachází opera La Scala?" (vyžaduje znalost)
 
-⚠️ KREATIVITA: Vyhni se běžným otázkám! Buď originální a překvapivý.
+# KVALITA OTÁZEK
+- Testuj SKUTEČNÉ znalosti
+- Buď SPECIFICKÝ (přesný rok, jméno, místo)
+- Obsahuj zajímavé "fun facts"
+- Vyžaduj zamyšlení, ne intuici`;
+}
 
-PŘÍKLADY KVALITNÍCH OBTÍŽNÝCH OTÁZEK:
-✅ "Který fotbalista je jediný, kdo vyhrál Zlatý míč i jako obránce?"
-✅ "Jaký film se stal první animovanou snímkem nominovaným na Oscara za nejlepší film?"
-✅ "Kolik titulů mistra světa vyhrál Michael Schumacher?"
-✅ "Ve kterém roce byla založena sociální síť Facebook?"
+function buildJuniorSystemPrompt() {
+  return `# ROLE
+Jsi tvůrce vědomostních kvízů pro děti 8-12 let.
 
-ŠPATNÉ OTÁZKY (příliš lehké):
-❌ "Kdo vyhrál MS ve fotbale 2022?" (nedávná událost)
-❌ "Jaké je hlavní město Německa?" (základní znalost)
-❌ "Který sport se hraje s oranžovým míčem?" (příliš triviální)
+# JAZYK
+- Piš VŽDY gramaticky správnou češtinou
+- Jednoduché, jasné věty
+- Vyhni se složitým cizím slovům
 
-ZAKÁZANÉ:
-- Otázky s odpovědí delší než 5 slov
-- Otázky prozrazující odpověď
-- Opakující se vzorce
+# OBTÍŽNOST
+- Otázky pro první stupeň ZŠ
+- Co by mělo znát dítě 8-12 let
+- Zajímavé a poučné
 
-Formát (POUZE JSON):
-{
-  "question": "Náročná originální otázka",
-  "options": ["Odpověď A", "Odpověď B", "Odpověď C"],
-  "correct": 1
-}`;
-  }
+# PRAVIDLA
+- Otázky musí mít FAKTICKOU odpověď
+- ZAKÁZANÉ: filosofické otázky, abstraktní otázky
+- ZAKÁZANÉ: "Co by chtěl být...", "Kdyby byl..."`;
+}
 
-  // === 🔄 RETRY LOOP S ANTI-REPEAT ===
+// === 🔌 GROQ API VOLÁNÍ ===
+
+async function callGroqBatch(systemPrompt, userPrompt, mode, maxRetries = 5) {
+  const temperature = mode === 'kid' ? 0.7 : 0.9;
+  
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`🔄 Pokus ${attempt}/${maxRetries}...`);
+      console.log(`🔄 Volám Groq API (${MODEL})... pokus ${attempt}/${maxRetries}`);
+      const startTime = Date.now();
       
-      // 🎛️ RŮZNÉ PARAMETRY PRO JUNIOR vs DOSPĚLÝ
-      const temperature = mode === 'kid' ? 0.7 : 1.0;
-      const frequencyPenalty = mode === 'kid' ? 0.3 : 0.5;
-      const presencePenalty = mode === 'kid' ? 0.3 : 0.5;
-      
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+      const response = await groq.chat.completions.create({
+        model: MODEL,
         messages: [
-          { role: "system", content: systemPersona },
+          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
         temperature: temperature,
-        presence_penalty: presencePenalty,
-        frequency_penalty: frequencyPenalty,
-        max_tokens: 300,
+        max_tokens: 2500,
       });
-
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ Groq odpověděl za ${duration}ms`);
+      
       let rawContent = response.choices[0].message.content;
       rawContent = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
-
+      
+      // Pokus o opravu běžných JSON chyb
+      rawContent = fixCommonJsonErrors(rawContent);
+      
       const parsed = JSON.parse(rawContent);
       
-      // === ✅ VALIDACE ===
-      if (!parsed.question || !parsed.options || parsed.options.length !== 3) {
-        throw new Error("Neplatná struktura JSON");
+      // Validace struktury
+      if (!parsed.questions || !Array.isArray(parsed.questions)) {
+        throw new Error("Neplatná struktura: chybí pole 'questions'");
       }
       
-      // 🔔 POSLEDNÍ POKUS = VŽDY AKCEPTOVAT!
-      if (attempt === maxRetries) {
-        console.log("🔔 Poslední pokus - akceptuji bez dalších kontrol!");
-        addToHistory(parsed.question);
-        return parsed;
+      if (parsed.questions.length < 10) {
+        throw new Error(`Nedostatek otázek: ${parsed.questions.length}/12`);
       }
       
-      // 🆕 Anti-repeat check (jen pro pokusy 1-4)
-      if (!isQuestionUnique(parsed.question)) {
-        console.log("⚠️ Otázka je příliš podobná předchozí, zkouším znovu...");
-        continue;
+      // Validace jednotlivých otázek
+      const validQuestions = parsed.questions.filter(q => 
+        q.question && 
+        q.options && 
+        Array.isArray(q.options) && 
+        q.options.length === 3 &&
+        typeof q.correct === 'number' &&
+        q.correct >= 0 && 
+        q.correct <= 2
+      );
+      
+      console.log(`📊 Validních otázek: ${validQuestions.length}/${parsed.questions.length}`);
+      
+      if (validQuestions.length < 8) {
+        throw new Error(`Příliš málo validních otázek: ${validQuestions.length}`);
       }
       
-      // Anti-spoiler check
-      if (containsSpoiler(parsed.question, parsed.options)) {
-        console.log("⚠️ Otázka prozrazuje odpověď, zkouším znovu...");
-        continue;
-      }
+      // Přidej do historie
+      addBatchToHistory(validQuestions);
       
-      // Kontrola délky odpovědí
-      const tooLongOptions = parsed.options.filter(opt => opt.split(' ').length > 5);
-      if (tooLongOptions.length > 0) {
-        console.log("⚠️ Příliš dlouhé odpovědi, zkouším znovu...");
-        continue;
-      }
+      return validQuestions;
       
-      // 🆕 Přidej do historie
-      addToHistory(parsed.question);
-      
-      console.log("✅ Otázka vygenerována úspěšně!");
-      return parsed;
-
     } catch (error) {
       console.error(`❌ Pokus ${attempt} selhal:`, error.message);
       
       if (attempt === maxRetries) {
-        console.log("🆘 Všechny pokusy selhaly, používám fallback...");
-        const fallbacks = mode === 'kid' ? fallbackQuestions.kid : fallbackQuestions.adult;
-        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+        console.error(`❌ Všechny ${maxRetries} pokusy selhaly`);
+        throw error;
+      }
+      
+      console.log(`🔄 Zkouším znovu...`);
+    }
+  }
+}
+
+/**
+ * Pokusí se opravit běžné JSON chyby z LLM výstupu
+ */
+function fixCommonJsonErrors(jsonString) {
+  let fixed = jsonString;
+  
+  // Odstraň trailing čárky před ] nebo }
+  fixed = fixed.replace(/,\s*]/g, ']');
+  fixed = fixed.replace(/,\s*}/g, '}');
+  
+  // Oprav chybějící čárky mezi objekty v poli
+  fixed = fixed.replace(/}\s*{/g, '},{');
+  
+  // Oprav chybějící čárky mezi položkami pole
+  fixed = fixed.replace(/"\s*\n\s*"/g, '",\n"');
+  
+  // Odstraň případné BOM nebo neviditelné znaky
+  fixed = fixed.replace(/^\uFEFF/, '');
+  
+  return fixed;
+}
+
+// === 🎯 GENEROVÁNÍ JEDNOTLIVÉ OTÁZKY (fallback když dojde cache) ===
+
+async function generateSingleQuestion(topic = 'general', mode = 'adult') {
+  console.log(`\n🔄 Generuji JEDNOTLIVOU otázku (${mode})...`);
+  
+  const categories = mode === 'kid' ? JUNIOR_CATEGORIES : ADULT_CATEGORIES;
+  const categoryKeys = Object.keys(categories);
+  const randomCatKey = categoryKeys[Math.floor(Math.random() * categoryKeys.length)];
+  const randomCat = categories[randomCatKey];
+  const randomAspect = randomCat.aspects[Math.floor(Math.random() * randomCat.aspects.length)];
+  
+  const systemPrompt = mode === 'kid' 
+    ? buildJuniorSystemPrompt() 
+    : buildAdultSystemPrompt();
+  
+  const topicInstruction = topic === 'general' 
+    ? `Kategorie: "${randomCat.name}", Aspekt: "${randomAspect}"`
+    : `Téma od uživatele: "${topic}"`;
+  
+  const userPrompt = `
+# ÚKOL
+Vygeneruj JEDNU kvízovou otázku.
+
+${topicInstruction}
+
+# PRAVIDLA
+- Otázka musí být fakticky správná
+- Odpovědi maximálně 4 slova
+- V otázce NIKDY nezmiňuj správnou odpověď
+${getRecentEntitiesForPrompt()}
+
+# VÝSTUPNÍ FORMÁT (POUZE JSON)
+{
+  "question": "Text otázky",
+  "options": ["Odpověď A", "Odpověď B", "Odpověď C"],
+  "correct": 0
+}
+`;
+
+  try {
+    const response = await groq.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: mode === 'kid' ? 0.7 : 0.9,
+      max_tokens: 300,
+    });
+    
+    let rawContent = response.choices[0].message.content;
+    rawContent = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
+    
+    const parsed = JSON.parse(rawContent);
+    
+    if (!parsed.question || !parsed.options || parsed.options.length !== 3) {
+      throw new Error("Neplatná struktura JSON");
+    }
+    
+    addToHistory(parsed.question);
+    console.log(`✅ Jednotlivá otázka vygenerována`);
+    
+    return parsed;
+    
+  } catch (error) {
+    console.error(`❌ Jednotlivá otázka selhala:`, error.message);
+    throw error;
+  }
+}
+
+// === 📤 HLAVNÍ EXPORTOVANÉ FUNKCE ===
+
+/**
+ * Inicializuje batch otázek
+ * @param {string} topic - 'general' pro zdarma, nebo custom téma pro premium
+ * @param {string} mode - 'adult' nebo 'kid'
+ * @returns {Promise<boolean>} - true pokud se batch úspěšně vygeneroval
+ */
+export async function initializeBatch(topic = 'general', mode = 'adult') {
+  try {
+    if (topic === 'general') {
+      questionCache = await generateFreeBatch(mode);
+    } else {
+      questionCache = await generatePremiumBatch(topic, mode);
+    }
+    
+    // Zamíchej pořadí otázek v cache
+    questionCache = shuffleArray(questionCache);
+    
+    console.log(`📦 Cache naplněna: ${questionCache.length} otázek`);
+    return true;
+    
+  } catch (error) {
+    console.error(`❌ Inicializace batch selhala:`, error.message);
+    questionCache = [];
+    return false;
+  }
+}
+
+/**
+ * Hlavní funkce pro získání otázky (kompatibilní s původním API)
+ * @param {string} topic - 'general' nebo custom téma
+ * @param {string} mode - 'adult' nebo 'kid'
+ * @returns {Promise<Object>} - otázka s options a correct
+ */
+export async function generateQuestion(topic = 'general', mode = 'adult') {
+  // Pokud je cache prázdná, inicializuj batch
+  if (questionCache.length === 0) {
+    console.log(`📦 Cache prázdná, generuji batch...`);
+    const success = await initializeBatch(topic, mode);
+    
+    if (!success || questionCache.length === 0) {
+      // Batch selhal, zkus jednotlivou otázku
+      console.log(`⚠️ Batch selhal, zkouším jednotlivou otázku...`);
+      try {
+        return await generateSingleQuestion(topic, mode);
+      } catch (error) {
+        // Úplný fallback - chybová hláška
+        console.error(`❌ KRITICKÁ CHYBA: Nelze vygenerovat otázku`);
+        throw new Error("SELHAL GENERÁTOR OTÁZEK. ZKUSTE TO PROSÍM POZDĚJI. ADMINISTRÁTORA JSME INFORMOVALI.");
       }
     }
   }
   
-  // 🆘 SAFETY FALLBACK: Pokud jsme prošli loop bez return
-  console.log("🆘 Loop skončil bez return, používám fallback...");
-  const fallbacks = mode === 'kid' ? fallbackQuestions.kid : fallbackQuestions.adult;
-  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+  // Vrať otázku z cache
+  const question = questionCache.shift();
+  console.log(`📤 Otázka z cache (zbývá: ${questionCache.length})`);
+  
+  // Pokud dochází cache a je to poslední otázka, generuj další jednotlivě
+  if (questionCache.length === 0) {
+    console.log(`⚠️ Cache vyprázdněna`);
+  }
+  
+  return question;
 }
 
-// 🆕 Export pro testing
+/**
+ * Vrátí počet otázek v cache
+ */
+export function getCacheSize() {
+  return questionCache.length;
+}
+
+/**
+ * Vymaže historii (pro testování)
+ */
 export function clearHistory() {
   recentQuestions.length = 0;
-  console.log("🧹 Historie otázek vymazána");
+  recentEntities.length = 0;
+  questionCache.length = 0;
+  console.log("🧹 Historie a cache vymazána");
 }
 
+/**
+ * Vrátí velikost historie
+ */
 export function getHistorySize() {
   return recentQuestions.length;
+}
+
+/**
+ * Vrátí velikost entity historie
+ */
+export function getEntityHistorySize() {
+  return recentEntities.length;
+}
+
+/**
+ * Validace premium tématu (pro frontend)
+ */
+export function validatePremiumTopic(topic) {
+  const errors = [];
+  
+  if (!topic || topic.trim().length === 0) {
+    errors.push("Téma nesmí být prázdné");
+  }
+  
+  if (topic && topic.length < 3) {
+    errors.push("Téma je příliš krátké");
+  }
+  
+  if (topic && topic.length > 50) {
+    errors.push("Téma je příliš dlouhé");
+  }
+  
+  if (topic && /^\d+$/.test(topic)) {
+    errors.push("Téma nesmí obsahovat pouze čísla");
+  }
+  
+  if (topic && /^[^a-zA-Zá-žÁ-Ž0-9\s]+$/.test(topic)) {
+    errors.push("Téma obsahuje neplatné znaky");
+  }
+  
+  // Blacklist vulgarit (základní)
+  const vulgarWords = ['kurva', 'píča', 'kokot', 'debil', 'kráva', 'prdel'];
+  const lowerTopic = topic?.toLowerCase() || '';
+  if (vulgarWords.some(word => lowerTopic.includes(word))) {
+    errors.push("Téma obsahuje nevhodná slova");
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors: errors,
+    warning: errors.length > 0 
+      ? "Takto zadané téma pravděpodobně nepřinese dobrý zážitek ze hry. Doporučujeme jej upravit. Například 'Historie italské kuchyně' či 'Současný evropský fotbal'."
+      : null
+  };
 }

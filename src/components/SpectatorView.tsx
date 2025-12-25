@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Eye, AlertCircle, Loader, Trophy, Check, X, Clock, Home } from 'lucide-react';
+import { Eye, AlertCircle, Loader, Trophy, Check, X, Clock, Home, HelpCircle } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 interface Player {
@@ -435,6 +435,17 @@ export default function SpectatorView() {
               </button>
               {' '}s platností na měsíc.
             </p>
+          </div>
+
+          {/* ❓ FAQ odkaz */}
+          <div className="text-center pt-2">
+            <a
+              href="/faq"
+              className="inline-flex items-center gap-2 text-slate-500 hover:text-cyan-400 text-sm transition-colors"
+            >
+              <HelpCircle size={14} />
+              <span>Jak hra funguje?</span>
+            </a>
           </div>
         </div>
       </div>
