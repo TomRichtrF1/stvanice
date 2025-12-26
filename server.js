@@ -7,7 +7,7 @@ import Stripe from 'stripe';
 import fs from 'fs';
 import path from 'path';
 // ZDE JE IMPORT NAŠEHO NOVÉHO MOZKU:
-import { generateQuestion, getCategories, ADULT_CATEGORIES, JUNIOR_CATEGORIES } from './question_generator.js';
+import { generateQuestion, getCategories, clearQuestionCache, getJuniorDifficultyOptions, ADULT_CATEGORIES, JUNIOR_CATEGORIES, JUNIOR_DIFFICULTY_CONFIG } from './question_generator.js';
 // IMPORT CODE MANAGERU:
 import { validateCode, createGameCode, cleanupExpiredCodes } from './CodeManager.js';
 
@@ -34,6 +34,10 @@ const io = new Server(httpServer, {
 const PORT = process.env.PORT || 3000;
 
 const games = new Map();
+
+// 🕐 Grace period pro odpojené hráče (15 sekund)
+const DISCONNECT_GRACE_PERIOD = 15000;
+const disconnectedPlayers = new Map(); // socketId -> { gameCode, timeout, timestamp }
 
 // === API ENDPOINTY ===
 
@@ -86,7 +90,14 @@ app.get('/api/debug/games', (req, res) => {
 // 📚 API: Získání kategorií podle módu
 app.get('/api/categories/:mode', (req, res) => {
   const { mode } = req.params;
-  const categories = mode === 'kid' ? JUNIOR_CATEGORIES : ADULT_CATEGORIES;
+  const { difficulty } = req.query; // Pro junior: easy, medium, hard
+  
+  let categories;
+  if (mode === 'kid' && difficulty && JUNIOR_DIFFICULTY_CONFIG[difficulty]) {
+    categories = JUNIOR_DIFFICULTY_CONFIG[difficulty].categories;
+  } else {
+    categories = mode === 'kid' ? JUNIOR_CATEGORIES : ADULT_CATEGORIES;
+  }
   
   const categoryList = Object.entries(categories).map(([key, cat]) => ({
     key,
@@ -94,7 +105,19 @@ app.get('/api/categories/:mode', (req, res) => {
     aspectCount: cat.aspects.length
   }));
   
-  res.json({ mode, categories: categoryList });
+  res.json({ mode, difficulty, categories: categoryList });
+});
+
+// 🎓 API: Získání možností obtížnosti pro Junior režim
+app.get('/api/junior-difficulties', (req, res) => {
+  const difficulties = Object.entries(JUNIOR_DIFFICULTY_CONFIG).map(([key, config]) => ({
+    key,
+    name: config.name,
+    age: config.age,
+    description: config.description
+  }));
+  
+  res.json({ difficulties });
 });
 
 // === STRIPE ENDPOINTY ===
@@ -268,9 +291,10 @@ io.on('connection', (socket) => {
       
       // === NASTAVENÍ HRY ===
       settings: {
-        mode: 'adult',      // Výchozí: dospělí
-        topic: 'general',   // Zachováno pro kompatibilitu
-        category: null,     // null = mix všech, nebo 'motorsport', 'film', ...
+        mode: 'adult',           // Výchozí: dospělí
+        topic: 'general',        // Zachováno pro kompatibilitu
+        category: null,          // null = mix všech, nebo 'motorsport', 'film', ...
+        juniorDifficulty: 'hard' // 'easy' | 'medium' | 'hard' (pouze pro mode='kid')
       },
       
       headstart: null,
@@ -295,6 +319,12 @@ io.on('connection', (socket) => {
       return;
     }
     
+    // 🗑️ Pokud se mění mód, vyčistit cache otázek (nový batch pro nový mód)
+    if (game.settings.mode !== mode) {
+      clearQuestionCache();
+      console.log(`🗑️ Cache cleared due to mode change: ${game.settings.mode} → ${mode}`);
+    }
+    
     game.settings.mode = mode; // Uložíme 'kid' nebo 'adult'
     // Při změně módu resetuj kategorii (jiné kategorie pro adult/junior)
     game.settings.category = null;
@@ -305,19 +335,10 @@ io.on('connection', (socket) => {
 
   // === 📚 ZMĚNA KATEGORIE OTÁZEK ===
   socket.on('update_category', ({ code, category }) => {
-    console.log(`\n📚 ========== UPDATE CATEGORY ==========`);
-    console.log(`   Code: ${code}`);
-    console.log(`   Category: ${category}`);
-    
     const game = games.get(code);
-    if (!game) {
-      console.log(`❌ Game not found: ${code}`);
-      return;
-    }
+    if (!game) return;
     
-    console.log(`   Game phase: ${game.phase}`);
-    
-    // ✅ Povolit změnu pouze ve fázích lobby, waiting a role_selection
+    // Povolit změnu pouze ve fázích lobby, waiting a role_selection
     if (game.phase !== 'lobby' && game.phase !== 'waiting' && game.phase !== 'role_selection') {
       console.log(`⚠️ Category change rejected - game in phase: ${game.phase}`);
       return;
@@ -330,12 +351,52 @@ io.on('connection', (socket) => {
       return;
     }
     
-    game.settings.category = category; // null = mix všech, nebo konkrétní klíč
+    // 🗑️ Pokud se mění kategorie, vyčistit cache otázek (nový batch pro novou kategorii)
+    if (game.settings.category !== category) {
+      clearQuestionCache();
+      const oldName = game.settings.category ? categories[game.settings.category]?.name : 'Mix';
+      const newName = category ? categories[category].name : 'Mix';
+      console.log(`🗑️ Cache cleared due to category change: ${oldName} → ${newName}`);
+    }
+    
+    game.settings.category = category;
     io.to(code).emit('settings_changed', game.settings);
     
     const categoryName = category ? categories[category].name : 'Mix všech';
-    console.log(`✅ Category updated: ${categoryName}`);
-    console.log(`📚 ========================================\n`);
+    console.log(`📚 Game ${code} category: ${categoryName}`);
+  });
+
+  // === 🎓 ZMĚNA OBTÍŽNOSTI JUNIOR REŽIMU ===
+  socket.on('update_junior_difficulty', ({ code, difficulty }) => {
+    const game = games.get(code);
+    if (!game) return;
+    
+    // Povolit změnu pouze ve fázích lobby, waiting a role_selection
+    if (game.phase !== 'lobby' && game.phase !== 'waiting' && game.phase !== 'role_selection') {
+      console.log(`⚠️ Junior difficulty change rejected - game in phase: ${game.phase}`);
+      return;
+    }
+    
+    // Ověř že difficulty je validní
+    const validDifficulties = ['easy', 'medium', 'hard'];
+    if (!validDifficulties.includes(difficulty)) {
+      console.log(`⚠️ Invalid junior difficulty: ${difficulty}`);
+      return;
+    }
+    
+    // 🗑️ Pokud se mění obtížnost, vyčistit cache otázek
+    if (game.settings.juniorDifficulty !== difficulty) {
+      clearQuestionCache();
+      console.log(`🗑️ Cache cleared due to junior difficulty change: ${game.settings.juniorDifficulty} → ${difficulty}`);
+    }
+    
+    game.settings.juniorDifficulty = difficulty;
+    // Při změně obtížnosti také resetovat kategorii (jiné kategorie pro různé obtížnosti)
+    game.settings.category = null;
+    io.to(code).emit('settings_changed', game.settings);
+    
+    const difficultyConfig = JUNIOR_DIFFICULTY_CONFIG[difficulty];
+    console.log(`🎓 Game ${code} junior difficulty: ${difficultyConfig?.name || difficulty}`);
   });
 
   socket.on('join_game', (code) => {
@@ -511,9 +572,13 @@ io.on('connection', (socket) => {
     if (game.players.every(p => p.ready)) {
       game.phase = 'playing';
       
-      // === VOLÁNÍ AI MOZKU - S PODPOROU KATEGORIE ===
+      // === VOLÁNÍ AI MOZKU - S PODPOROU KATEGORIE A JUNIOR OBTÍŽNOSTI ===
       try {
-        const newQuestion = await generateQuestion(game.settings.mode, game.settings.category);
+        const newQuestion = await generateQuestion(
+          game.settings.mode, 
+          game.settings.category,
+          game.settings.juniorDifficulty
+        );
         game.currentQuestion = newQuestion;
         
         game.players.forEach(p => p.ready = false);
@@ -622,6 +687,44 @@ io.on('connection', (socket) => {
     });
   });
 
+  // 🔄 Pokus o reconnect - zrušení grace period
+  socket.on('player_reconnect', ({ code }) => {
+    const game = games.get(code);
+    if (!game) return;
+    
+    // Zkontroluj, jestli je hráč v disconnected stavu
+    const disconnectInfo = disconnectedPlayers.get(socket.id);
+    if (disconnectInfo && disconnectInfo.gameCode === code) {
+      clearTimeout(disconnectInfo.timeout);
+      disconnectedPlayers.delete(socket.id);
+      console.log(`🔄 Hráč ${socket.id} se reconnectoval do hry ${code} (grace period zrušen)`);
+      
+      // Přidej hráče zpět do místnosti
+      socket.join(code);
+    }
+  });
+
+  // 📱 Hráč přepnul do jiného okna (pause)
+  socket.on('player_paused', ({ code }) => {
+    console.log(`📱 Hráč ${socket.id} přepnul do jiného okna (hra ${code})`);
+    // Jen logujeme, neděláme nic - socket zůstává připojený
+  });
+
+  // 📱 Hráč se vrátil do okna
+  socket.on('player_resumed', ({ code }) => {
+    console.log(`📱 Hráč ${socket.id} se vrátil do hry ${code}`);
+    // Můžeme případně refreshnout stav
+    const game = games.get(code);
+    if (game) {
+      socket.emit('game_state_sync', {
+        phase: game.phase,
+        players: game.players,
+        currentQuestion: game.currentQuestion,
+        headstart: game.headstart
+      });
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
 
@@ -635,12 +738,35 @@ io.on('connection', (socket) => {
       return; // Spectator neukončuje hru
     }
 
-    // Hráč odchází - ukončí hru
+    // 🕐 Hráč odchází - GRACE PERIOD
     games.forEach((game, code) => {
       const playerIndex = game.players.findIndex(p => p.id === socket.id);
       if (playerIndex !== -1) {
-        io.to(code).emit('player_disconnected');
-        games.delete(code);
+        console.log(`🕐 Hráč ${socket.id} se odpojil z hry ${code}. Grace period: ${DISCONNECT_GRACE_PERIOD/1000}s`);
+        
+        // Nastav grace period timeout
+        const timeout = setTimeout(() => {
+          // Po uplynutí grace period - ukončit hru
+          const currentGame = games.get(code);
+          if (currentGame) {
+            console.log(`💀 Grace period vypršel pro hráče ${socket.id}. Ukončuji hru ${code}`);
+            io.to(code).emit('player_disconnected');
+            games.delete(code);
+          }
+          disconnectedPlayers.delete(socket.id);
+        }, DISCONNECT_GRACE_PERIOD);
+        
+        disconnectedPlayers.set(socket.id, {
+          gameCode: code,
+          timeout: timeout,
+          timestamp: Date.now()
+        });
+        
+        // Informovat druhého hráče že soupeř se možná odpojil
+        io.to(code).emit('player_connection_unstable', {
+          playerId: socket.id,
+          gracePeriod: DISCONNECT_GRACE_PERIOD
+        });
       }
     });
   });

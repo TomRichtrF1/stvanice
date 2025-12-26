@@ -107,6 +107,56 @@ export default function SpectatorView() {
     };
   }, []);
 
+  // 🔄 Auto-reconnect ze sessionStorage
+  useEffect(() => {
+    if (!socket || !socketConnected || isConnected) return;
+    
+    const savedGameCode = sessionStorage.getItem('spectator_gameCode');
+    const savedPremiumCode = sessionStorage.getItem('spectator_premiumCode');
+    
+    if (savedGameCode && savedPremiumCode) {
+      console.log('🔄 Auto-reconnect z sessionStorage:', savedGameCode);
+      setGameCode(savedGameCode);
+      setPremiumCode(savedPremiumCode);
+      
+      // Malé zpoždění aby se nastavily state hodnoty
+      setTimeout(() => {
+        setLoading(true);
+        socket.emit('join_as_spectator', { 
+          gameCode: savedGameCode, 
+          premiumCode: savedPremiumCode 
+        });
+      }, 100);
+    }
+  }, [socket, socketConnected, isConnected]);
+
+  // 👁️ Visibility change - reconnect při návratu na stránku
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const savedGameCode = sessionStorage.getItem('spectator_gameCode');
+        const savedPremiumCode = sessionStorage.getItem('spectator_premiumCode');
+        
+        // Pokud máme uložené kódy a nejsme připojeni, zkus reconnect
+        if (savedGameCode && savedPremiumCode && !isConnected) {
+          console.log('👁️ Stránka aktivní, zkouším reconnect...');
+          setLoading(true);
+          setError(null);
+          
+          socket.emit('join_as_spectator', { 
+            gameCode: savedGameCode, 
+            premiumCode: savedPremiumCode 
+          });
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [socket, isConnected]);
+
   // Socket event listeners
   useEffect(() => {
     if (!socket) return;
@@ -117,6 +167,10 @@ export default function SpectatorView() {
       setIsConnected(true);
       setLoading(false);
       setError(null);
+      
+      // 💾 Uložit kódy do sessionStorage pro reconnect
+      sessionStorage.setItem('spectator_gameCode', gameCode.toUpperCase());
+      sessionStorage.setItem('spectator_premiumCode', premiumCode.toUpperCase());
       
       // Nastav počáteční pozice
       const hunter = state.players.find(p => p.role === 'hunter');
@@ -260,6 +314,9 @@ export default function SpectatorView() {
       setIsConnected(false);
       setGameState(null);
       setWinner(null);
+      // 🗑️ Vyčistit sessionStorage - hra skončila
+      sessionStorage.removeItem('spectator_gameCode');
+      sessionStorage.removeItem('spectator_premiumCode');
     });
 
     return () => {
@@ -726,7 +783,7 @@ export default function SpectatorView() {
                       {gameState.currentQuestion && correctAnswer !== null && (
                         <a
                           href={`https://www.perplexity.ai/search?q=${encodeURIComponent(
-                            gameState.currentQuestion.question + ' správná odpověď ' + gameState.currentQuestion.options[correctAnswer]
+                            gameState.currentQuestion.question
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"

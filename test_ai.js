@@ -3,7 +3,10 @@ import {
   initializeBatch,
   getCacheSize,
   clearHistory,
-  getUsedAnswersSize
+  clearQuestionCache,
+  getUsedAnswersSize,
+  getJuniorDifficultyOptions,
+  JUNIOR_DIFFICULTY_CONFIG
 } from './question_generator.js';
 
 // === 🎨 POMOCNÉ FUNKCE ===
@@ -52,6 +55,129 @@ function checkForSpoilers(questionData) {
     }
   }
   return false;
+}
+
+function checkForAnswerInQuestion(questionData) {
+  const lowerQuestion = questionData.question.toLowerCase();
+  const correctAnswer = questionData.options[questionData.correct].toLowerCase().trim();
+  
+  // Kontrola celé odpovědi
+  if (lowerQuestion.includes(correctAnswer)) {
+    return { found: true, type: 'full', answer: correctAnswer };
+  }
+  
+  // Kontrola klíčových slov (5+ znaků)
+  const answerWords = correctAnswer
+    .split(/\s+/)
+    .filter(w => w.length > 4)
+    .filter(w => !['který', 'která', 'které', 'jaký', 'jaká', 'jaké'].includes(w));
+  
+  for (const word of answerWords) {
+    const wordBase = word.length > 5 ? word.substring(0, 5) : word;
+    if (lowerQuestion.includes(wordBase)) {
+      return { found: true, type: 'word', word: word, base: wordBase };
+    }
+  }
+  
+  return { found: false };
+}
+
+function checkForAmbiguousQuestion(questionData) {
+  const questionText = questionData.question;
+  
+  const suspiciousPatterns = [
+    { pattern: /kter[ýáéí]\s+.{0,30}\s+je\s+(známý|známá|známé|proslulý|proslulá)/i, reason: "známý/proslulý" },
+    { pattern: /kter[ýáéí]\s+\w+\s+(působí|působil|hraje|hrál|zpívá|zpíval)\s+(v|ve|na)/i, reason: "působí/hraje v" },
+    { pattern: /jakou?\s+(zeleninu|ovoce|jídlo|potravinu|ingredienci)\s+(máme|dáváme|přidáváme|používáme)/i, reason: "jakou zeleninu máme" },
+    { pattern: /jaké?\s+zvíře\s+(žije|bydlí|je|najdeme|vidíme)\s+(v|ve|na)/i, reason: "jaké zvíře žije v" },
+    { pattern: /jaké?\s+zvíře\s+je\s+(nejčastěji|obvykle|typicky|běžně)/i, reason: "jaké zvíře je nejčastěji" },
+    { pattern: /co\s+patří\s+mezi/i, reason: "co patří mezi" },
+    { pattern: /co\s+se\s+(nachází|vyskytuje|objevuje)\s+(v|ve|na)/i, reason: "co se nachází v" },
+    { pattern: /co\s+je\s+(typické|charakteristické|příznačné)\s+pro/i, reason: "co je typické pro" },
+    { pattern: /co\s+(můžeme|lze|je možné)\s+(vidět|najít|spatřit)\s+(v|ve|na)/i, reason: "co můžeme vidět v" },
+    { pattern: /co\s+je\s+(znečištění|součást|druh|typ|forma)/i, reason: "co je součást/druh" },
+    { pattern: /kter[ýáéí]\s+(kniha|film|píseň|skladba)\s+(byla|byl|je)\s+(zfilmována|natočen|vydána)/i, reason: "která kniha byla zfilmována" },
+    { pattern: /jaký\s+sport\s+se\s+(hraje|provozuje)/i, reason: "jaký sport se hraje" },
+    
+    // === NOVÉ VZORY v5.2 ===
+    { pattern: /kdo\s+je\s+hlavní\s+postava\s+(večerníčku|pohádky|příběhu|seriálu)\??$/i, reason: "hlavní postava bez názvu" },
+    { pattern: /co\s+(svítí|je|vidíme|najdeme)\s+(na\s+)?(obloze|nebi)/i, reason: "co svítí na obloze" },
+    { pattern: /co\s+(je|roste|žije|najdeme)\s+(na|v|ve)\s+(stromě|stromu|lese|vodě|moři|řece)/i, reason: "co je v lese/vodě" },
+    { pattern: /co\s+je\s+(největší|nejmenší|hlavní)\s+část/i, reason: "největší část" },
+    { pattern: /jakou\s+barvu\s+má\s+(les|obloha|moře|příroda|zahrada)/i, reason: "barva přírody" },
+    { pattern: /co\s+dělá\s+(pes|kočka|pták|zvíře)\??$/i, reason: "co dělá zvíře" },
+    { pattern: /kde\s+žije\s+(zvíře|pták|ryba)\??$/i, reason: "kde žije (obecné)" },
+    { pattern: /co\s+(jí|žere|konzumuje)\s+(zvíře|pták)\??$/i, reason: "co jí zvíře (obecné)" },
+    { pattern: /jakou\s+vlajku\s+má/i, reason: "popis vlajky" },
+    
+    // === NOVÉ VZORY v5.3 ===
+    { pattern: /co\s+(jí|žere|pije)\s+(kočka|pes|pták|kráva|králík|myš|had)\??$/i, reason: "co jí konkrétní zvíře" },
+    { pattern: /jak[áéý]\s+je\s+(zelenina|ovoce|jídlo|potravina|květina|rostlina|strom)\??$/i, reason: "jaká je zelenina/ovoce" },
+    { pattern: /co\s+je\s+(zelenina|ovoce|jídlo|květina)\??$/i, reason: "co je zelenina/ovoce" },
+    { pattern: /jaké\s+je\s+(ovoce|zelenina|jídlo)\??$/i, reason: "jaké je ovoce/zelenina" },
+    { pattern: /kter[éá]\s+(zvíře|zelenina|ovoce)\s+je\??$/i, reason: "které zvíře/zelenina je" },
+    
+    // === NOVÉ VZORY v5.4 ===
+    { pattern: /jakou\s+barvu\s+má\s+.{0,20}vlajka/i, reason: "barva vlajky" },
+    { pattern: /kdo\s+je\s+slavn[ýá]\s+(sportovec|herec|zpěvák|umělec|vědec|politik|spisovatel)/i, reason: "kdo je slavný X" },
+    { pattern: /kter[ýá]\s+(sportovec|herec|zpěvák|umělec)\s+je\s+slavn/i, reason: "který X je slavný" },
+    { pattern: /kdo\s+je\s+znám[ýá]\s+(sportovec|herec|zpěvák|umělec|vědec)/i, reason: "kdo je známý X" },
+    { pattern: /jaké\s+barvy\s+má\s+.{0,20}vlajka/i, reason: "barvy vlajky" },
+    
+    // === NOVÉ VZORY v5.5 ===
+    { pattern: /kdo\s+je\s+(považován|pokládán)\s+za\s+(jednoho|jednu)\s+(z|ze)\s+(nej|nejlepš)/i, reason: "jeden z nejlepších" },
+    { pattern: /co\s+(létá|plave|běhá|skáče|leze)\??$/i, reason: "co létá/plave" },
+    { pattern: /jak\s+se\s+jmenuje\s+(domácí\s+)?(mazlíček|zvíře|zvířátko)\??$/i, reason: "jméno mazlíčka" },
+    { pattern: /co\s+(děti|lidé|lidi)\s+(rád[yia]?|rádi)\s+(jedí|jí|pijí)\??$/i, reason: "co děti rády jedí" },
+    { pattern: /jak\s+se\s+jmenuje\s+znám[ýá]\s+(pták|zvíře|rostlina|strom|květina)/i, reason: "jméno známého X" },
+    { pattern: /co\s+je\s+(jednoduch[ýá]|složit[ýá]|snadn[ýá]|těžk[ýá])\s+\w+\??$/i, reason: "co je jednoduché X" },
+    { pattern: /co\s+je\s+(zdraví|láska|štěstí|radost|smutek|strach|život|smrt)\??$/i, reason: "co je zdraví/láska" },
+    { pattern: /co\s+je\s+(přátelství|rodina|domov|svoboda|pravda)\??$/i, reason: "co je abstraktní pojem" },
+    { pattern: /^co\s+(létá|plave|běží|roste|kvete|svítí|hřeje)\??$/i, reason: "co létá/svítí" },
+    { pattern: /kdo\s+je\s+(nejlepší|největší|nejznámější|nejslavnější)\s+(sportovec|herec|zpěvák)/i, reason: "kdo je nejlepší X" },
+  ];
+  
+  for (const { pattern, reason } of suspiciousPatterns) {
+    if (pattern.test(questionText)) {
+      return { found: true, reason };
+    }
+  }
+  
+  return { found: false };
+}
+
+function checkForPotentialHallucination(questionData) {
+  const questionText = questionData.question.toLowerCase();
+  
+  const hallucinationPatterns = [
+    { pattern: /jak\s+se\s+jmenuje\s+(kůň|pes|kočka|pták|myš|králík|medvěd|vlk|liška)\s+(z|ve|v)\s+(pohádky|pohádce|filmu|příběhu|seriálu)/i, reason: "jméno zvířete z pohádky" },
+    { pattern: /jaké?\s+(je\s+)?jméno\s+(koně|psa|kočky|ptáka|zvířete)\s+(z|ve|v)/i, reason: "jméno zvířete" },
+    { pattern: /jak\s+se\s+jmenuje\s+(přítel|pomocník|sluha|strážce)\s+.{0,30}\s+(z|ve|v)\s+(pohádky|pohádce|filmu)/i, reason: "jméno vedlejší postavy" },
+    { pattern: /jaká\s+je\s+barva\s+(koně|pláště|šatů|oblečení)\s+.{0,20}\s+(z|ve|v)\s+(pohádky|pohádce|filmu)/i, reason: "barva věci z pohádky" },
+    { pattern: /jak\s+se\s+jmenuje\s+(zámek|hrad|dům|vesnice|město|les)\s+(z|ve|v)\s+(pohádky|pohádce|filmu)/i, reason: "jméno místa z pohádky" },
+  ];
+  
+  const knownMainCharacters = [
+    'krteček', 'krtečka', 'krtek', 'rumcajs', 'manka', 'cipísek',
+    'mach', 'šebestová', 'pat', 'mat', 'bob', 'bobek', 'rákosníček',
+    'křemílek', 'vochomůrka', 'kubula', 'sněhurka', 'popelka',
+    'ariel', 'elsa', 'anna', 'simba', 'nemo', 'buzz', 'woody',
+    'shrek', 'fiona', 'harry potter', 'hermiona', 'pinocchio', 'bambi'
+  ];
+  
+  for (const { pattern, reason } of hallucinationPatterns) {
+    if (pattern.test(questionData.question)) {
+      const containsKnownCharacter = knownMainCharacters.some(char => 
+        questionText.includes(char)
+      );
+      
+      if (!containsKnownCharacter) {
+        return { found: true, reason };
+      }
+    }
+  }
+  
+  return { found: false };
 }
 
 function checkForDuplicates(questions) {
@@ -154,6 +280,9 @@ class TestStats {
     this.duplicateQuestions = 0;
     this.duplicateAnswers = 0;
     this.spoilers = 0;
+    this.answersInQuestion = 0;
+    this.ambiguousQuestions = 0;
+    this.potentialHallucinations = 0;
     this.similarPairs = 0;
     this.apiCalls = 0;
     this.errors = 0;
@@ -173,6 +302,9 @@ class TestStats {
     console.log(`   Duplicitní otázky:    ${this.duplicateQuestions}`);
     console.log(`   Duplicitní odpovědi:  ${this.duplicateAnswers}`);
     console.log(`   Spoilery:             ${this.spoilers}`);
+    console.log(`   Odpověď v otázce:     ${this.answersInQuestion}`);
+    console.log(`   Vágní otázky:         ${this.ambiguousQuestions}`);
+    console.log(`   Potenc. halucinace:   ${this.potentialHallucinations}`);
     console.log(`   Podobné páry:         ${this.similarPairs}`);
     console.log(`   Chyby:                ${this.errors}`);
     
@@ -205,11 +337,18 @@ async function runTest() {
   const stats = new TestStats();
   
   console.log("\n");
-  printTestHeader("🎮 ŠTVANICE v4.0 - TEST ZJEDNODUŠENÉ ARCHITEKTURY", "🚀");
-  console.log("Testování: Groq Llama + Batch generování + Rozšířené kategorie\n");
+  printTestHeader("🎮 ŠTVANICE v5.5 - TEST S ROZŠÍŘENÝMI FILTRY", "🚀");
+  console.log("Testování: Groq Llama + Batch generování + Junior obtížnosti\n");
   console.log("Model: llama-3.3-70b-versatile");
   console.log("Provider: Groq");
-  console.log("Režimy: ADULT (12 kategorií), JUNIOR (8 kategorií)\n");
+  console.log("Režimy: ADULT (12 kategorií), JUNIOR 3 úrovně:\n");
+  
+  // Zobraz junior obtížnosti
+  const difficulties = getJuniorDifficultyOptions();
+  difficulties.forEach(d => {
+    console.log(`   ${d.name} - ${d.age} (${d.description})`);
+  });
+  console.log("");
 
   try {
     // ============================================
@@ -224,7 +363,7 @@ async function runTest() {
     clearHistory();
     const startTime1 = Date.now();
     
-    const success1 = await initializeBatch('adult');
+    const success1 = await initializeBatch('adult', null, 'hard');
     stats.apiCalls++;
     
     const duration1 = Date.now() - startTime1;
@@ -239,18 +378,44 @@ async function runTest() {
       console.log(`📦 Cache size: ${cacheSize} otázek\n`);
       
       const adultQuestions = [];
+      let answerInQuestionCount = 0;
+      let ambiguousCount = 0;
+      let hallucinationCount = 0;
+      
       for (let i = 1; i <= Math.min(cacheSize, 12); i++) {
-        const q = await generateQuestion('general', 'adult');
+        const q = await generateQuestion('adult', null, 'hard');
         printQuestionCompact(q, i);
         adultQuestions.push(q);
         stats.totalQuestions++;
+        
         if (checkForSpoilers(q)) stats.spoilers++;
+        
+        const answerCheck = checkForAnswerInQuestion(q);
+        if (answerCheck.found) {
+          answerInQuestionCount++;
+          console.log(`      ⚠️ ODPOVĚĎ V OTÁZCE: ${answerCheck.type === 'full' ? answerCheck.answer : answerCheck.word}`);
+        }
+        
+        const ambiguousCheck = checkForAmbiguousQuestion(q);
+        if (ambiguousCheck.found) {
+          ambiguousCount++;
+          console.log(`      ⚠️ VÁGNÍ OTÁZKA: ${ambiguousCheck.reason}`);
+        }
+        
+        const hallucinationCheck = checkForPotentialHallucination(q);
+        if (hallucinationCheck.found) {
+          hallucinationCount++;
+          console.log(`      🚨 POTENCIÁLNÍ HALUCINACE: ${hallucinationCheck.reason}`);
+        }
       }
       
-      // Kontroly
+      stats.answersInQuestion += answerInQuestionCount;
+      stats.ambiguousQuestions += ambiguousCount;
+      stats.potentialHallucinations += hallucinationCount;
+      
       const dups = checkForDuplicates(adultQuestions);
       const dupAnswers = checkForDuplicateAnswers(adultQuestions);
-      const similar = checkForSimilarQuestions(adultQuestions);
+      const similar = checkForSimilarQuestions(adultQuestions, 0.6);
       stats.duplicateQuestions += dups.length;
       stats.duplicateAnswers += dupAnswers.length;
       stats.similarPairs += similar.length;
@@ -259,6 +424,9 @@ async function runTest() {
       console.log(`   Duplicitní otázky: ${dups.length}`);
       console.log(`   Duplicitní odpovědi: ${dupAnswers.length}`);
       console.log(`   Podobné otázky: ${similar.length}`);
+      console.log(`   Odpověď v otázce: ${answerInQuestionCount}`);
+      console.log(`   Vágní otázky: ${ambiguousCount}`);
+      console.log(`   Potenc. halucinace: ${hallucinationCount}`);
       console.log(`   Použité odpovědi v historii: ${getUsedAnswersSize()}`);
       
       if (dupAnswers.length > 0) {
@@ -268,21 +436,20 @@ async function runTest() {
       
       const passed = dups.length === 0 && dupAnswers.length === 0 && adultQuestions.length >= 10;
       stats.addResult("ADULT Batch", passed,
-        `${adultQuestions.length} otázek, ${dups.length} dup. otázek, ${dupAnswers.length} dup. odpovědí, ${duration1}ms`);
+        `${adultQuestions.length} otázek, ${dups.length} dup., ${dupAnswers.length} dup.odp., ${ambiguousCount} vágních, ${hallucinationCount} haluc., ${duration1}ms`);
     }
 
     // ============================================
-    // TEST 2: JUNIOR BATCH (24 otázek)
+    // TEST 2: JUNIOR EASY (Drobečci 4-6 let)
     // ============================================
-    printTestHeader("TEST #2: JUNIOR MODE - Batch 24 otázek", "👶");
-    console.log("Cíl: Vygenerovat batch 24 otázek z 8 kategorií pro děti 8-14 let\n");
-    console.log("Kategorie: Zvířata, Pohádky a filmy, Lidské tělo, Svět kolem nás,");
-    console.log("           Vesmír, Sport pro děti, Věda pro děti, Historie pro děti\n");
+    printTestHeader("TEST #2: JUNIOR EASY - 🐣 Drobečci (4-6 let)", "👶");
+    console.log("Cíl: Vygenerovat otázky pro předškoláky\n");
+    console.log("Kategorie: Zvířátka, České pohádky, Barvy a tvary, Jídlo, Příroda\n");
     
     clearHistory();
     const startTime2 = Date.now();
     
-    const success2 = await initializeBatch('kid');
+    const success2 = await initializeBatch('kid', null, 'easy');
     stats.apiCalls++;
     
     const duration2 = Date.now() - startTime2;
@@ -291,51 +458,205 @@ async function runTest() {
     if (!success2) {
       console.log("❌ Batch selhal!");
       stats.errors++;
-      stats.addResult("JUNIOR Batch", false, "Inicializace selhala");
+      stats.addResult("JUNIOR EASY (Drobečci)", false, "Inicializace selhala");
     } else {
       const cacheSize = getCacheSize();
       console.log(`📦 Cache size: ${cacheSize} otázek\n`);
       
-      const juniorQuestions = [];
-      for (let i = 1; i <= Math.min(cacheSize, 12); i++) {
-        const q = await generateQuestion('general', 'kid');
+      const easyQuestions = [];
+      let ambiguousCount = 0;
+      let hallucinationCount = 0;
+      
+      for (let i = 1; i <= Math.min(cacheSize, 8); i++) {
+        const q = await generateQuestion('kid', null, 'easy');
         printQuestionCompact(q, i);
-        juniorQuestions.push(q);
+        easyQuestions.push(q);
         stats.totalQuestions++;
         if (checkForSpoilers(q)) stats.spoilers++;
+        
+        const ambiguousCheck = checkForAmbiguousQuestion(q);
+        if (ambiguousCheck.found) {
+          ambiguousCount++;
+          console.log(`      ⚠️ VÁGNÍ OTÁZKA: ${ambiguousCheck.reason}`);
+        }
+        
+        const hallucinationCheck = checkForPotentialHallucination(q);
+        if (hallucinationCheck.found) {
+          hallucinationCount++;
+          console.log(`      🚨 POTENCIÁLNÍ HALUCINACE: ${hallucinationCheck.reason}`);
+        }
       }
       
-      const dups = checkForDuplicates(juniorQuestions);
-      const dupAnswers = checkForDuplicateAnswers(juniorQuestions);
+      stats.ambiguousQuestions += ambiguousCount;
+      stats.potentialHallucinations += hallucinationCount;
+      
+      const dups = checkForDuplicates(easyQuestions);
+      const dupAnswers = checkForDuplicateAnswers(easyQuestions);
       stats.duplicateQuestions += dups.length;
       stats.duplicateAnswers += dupAnswers.length;
       
       console.log(`\n📊 Analýza kvality:`);
       console.log(`   Duplicitní otázky: ${dups.length}`);
       console.log(`   Duplicitní odpovědi: ${dupAnswers.length}`);
+      console.log(`   Vágní otázky: ${ambiguousCount}`);
+      console.log(`   Potenc. halucinace: ${hallucinationCount}`);
       console.log(`   Použité odpovědi v historii: ${getUsedAnswersSize()}`);
       
-      const passed = dups.length === 0 && dupAnswers.length === 0 && juniorQuestions.length >= 10;
-      stats.addResult("JUNIOR Batch", passed,
-        `${juniorQuestions.length} otázek, ${dups.length} dup. otázek, ${dupAnswers.length} dup. odpovědí, ${duration2}ms`);
+      const passed = dups.length === 0 && dupAnswers.length === 0 && easyQuestions.length >= 6;
+      stats.addResult("JUNIOR EASY (Drobečci)", passed,
+        `${easyQuestions.length} otázek, ${dups.length} dup., ${ambiguousCount} vágních, ${hallucinationCount} haluc., ${duration2}ms`);
     }
 
     // ============================================
-    // TEST 3: ANTI-REPEAT NAPŘÍČ BATCHI
+    // TEST 3: JUNIOR MEDIUM (Školáci 7-10 let)
     // ============================================
-    printTestHeader("TEST #3: ANTI-REPEAT NAPŘÍČ 2 BATCHI", "🔄");
+    printTestHeader("TEST #3: JUNIOR MEDIUM - 📚 Školáci (7-10 let)", "📚");
+    console.log("Cíl: Vygenerovat otázky pro 1.-4. třídu ZŠ\n");
+    console.log("Kategorie: Zvířata, Pohádky, Svět, Lidské tělo, Vesmír, Věda\n");
+    
+    clearHistory();
+    const startTime3 = Date.now();
+    
+    const success3 = await initializeBatch('kid', null, 'medium');
+    stats.apiCalls++;
+    
+    const duration3 = Date.now() - startTime3;
+    console.log(`⏱️  Doba generování: ${duration3}ms`);
+    
+    if (!success3) {
+      console.log("❌ Batch selhal!");
+      stats.errors++;
+      stats.addResult("JUNIOR MEDIUM (Školáci)", false, "Inicializace selhala");
+    } else {
+      const cacheSize = getCacheSize();
+      console.log(`📦 Cache size: ${cacheSize} otázek\n`);
+      
+      const mediumQuestions = [];
+      let ambiguousCount = 0;
+      let hallucinationCount = 0;
+      
+      for (let i = 1; i <= Math.min(cacheSize, 8); i++) {
+        const q = await generateQuestion('kid', null, 'medium');
+        printQuestionCompact(q, i);
+        mediumQuestions.push(q);
+        stats.totalQuestions++;
+        if (checkForSpoilers(q)) stats.spoilers++;
+        
+        const ambiguousCheck = checkForAmbiguousQuestion(q);
+        if (ambiguousCheck.found) {
+          ambiguousCount++;
+          console.log(`      ⚠️ VÁGNÍ OTÁZKA: ${ambiguousCheck.reason}`);
+        }
+        
+        const hallucinationCheck = checkForPotentialHallucination(q);
+        if (hallucinationCheck.found) {
+          hallucinationCount++;
+          console.log(`      🚨 POTENCIÁLNÍ HALUCINACE: ${hallucinationCheck.reason}`);
+        }
+      }
+      
+      stats.ambiguousQuestions += ambiguousCount;
+      stats.potentialHallucinations += hallucinationCount;
+      
+      const dups = checkForDuplicates(mediumQuestions);
+      const dupAnswers = checkForDuplicateAnswers(mediumQuestions);
+      stats.duplicateQuestions += dups.length;
+      stats.duplicateAnswers += dupAnswers.length;
+      
+      console.log(`\n📊 Analýza kvality:`);
+      console.log(`   Duplicitní otázky: ${dups.length}`);
+      console.log(`   Duplicitní odpovědi: ${dupAnswers.length}`);
+      console.log(`   Vágní otázky: ${ambiguousCount}`);
+      console.log(`   Potenc. halucinace: ${hallucinationCount}`);
+      
+      const passed = dups.length === 0 && dupAnswers.length === 0 && mediumQuestions.length >= 6;
+      stats.addResult("JUNIOR MEDIUM (Školáci)", passed,
+        `${mediumQuestions.length} otázek, ${dups.length} dup., ${ambiguousCount} vágních, ${hallucinationCount} haluc., ${duration3}ms`);
+    }
+
+    // ============================================
+    // TEST 4: JUNIOR HARD (Kluci a holky 11-14 let)
+    // ============================================
+    printTestHeader("TEST #4: JUNIOR HARD - 🎒 Kluci a holky (11-14 let)", "🎒");
+    console.log("Cíl: Vygenerovat otázky pro 5.-9. třídu ZŠ\n");
+    console.log("Kategorie: Zvířata, Pohádky, Lidské tělo, Svět, Vesmír, Sport, Věda, Historie\n");
+    
+    clearHistory();
+    const startTime4 = Date.now();
+    
+    const success4 = await initializeBatch('kid', null, 'hard');
+    stats.apiCalls++;
+    
+    const duration4 = Date.now() - startTime4;
+    console.log(`⏱️  Doba generování: ${duration4}ms`);
+    
+    if (!success4) {
+      console.log("❌ Batch selhal!");
+      stats.errors++;
+      stats.addResult("JUNIOR HARD (Kluci a holky)", false, "Inicializace selhala");
+    } else {
+      const cacheSize = getCacheSize();
+      console.log(`📦 Cache size: ${cacheSize} otázek\n`);
+      
+      const hardQuestions = [];
+      let ambiguousCount = 0;
+      let hallucinationCount = 0;
+      
+      for (let i = 1; i <= Math.min(cacheSize, 8); i++) {
+        const q = await generateQuestion('kid', null, 'hard');
+        printQuestionCompact(q, i);
+        hardQuestions.push(q);
+        stats.totalQuestions++;
+        if (checkForSpoilers(q)) stats.spoilers++;
+        
+        const ambiguousCheck = checkForAmbiguousQuestion(q);
+        if (ambiguousCheck.found) {
+          ambiguousCount++;
+          console.log(`      ⚠️ VÁGNÍ OTÁZKA: ${ambiguousCheck.reason}`);
+        }
+        
+        const hallucinationCheck = checkForPotentialHallucination(q);
+        if (hallucinationCheck.found) {
+          hallucinationCount++;
+          console.log(`      🚨 POTENCIÁLNÍ HALUCINACE: ${hallucinationCheck.reason}`);
+        }
+      }
+      
+      stats.ambiguousQuestions += ambiguousCount;
+      stats.potentialHallucinations += hallucinationCount;
+      
+      const dups = checkForDuplicates(hardQuestions);
+      const dupAnswers = checkForDuplicateAnswers(hardQuestions);
+      stats.duplicateQuestions += dups.length;
+      stats.duplicateAnswers += dupAnswers.length;
+      
+      console.log(`\n📊 Analýza kvality:`);
+      console.log(`   Duplicitní otázky: ${dups.length}`);
+      console.log(`   Duplicitní odpovědi: ${dupAnswers.length}`);
+      console.log(`   Vágní otázky: ${ambiguousCount}`);
+      console.log(`   Potenc. halucinace: ${hallucinationCount}`);
+      
+      const passed = dups.length === 0 && dupAnswers.length === 0 && hardQuestions.length >= 6;
+      stats.addResult("JUNIOR HARD (Kluci a holky)", passed,
+        `${hardQuestions.length} otázek, ${dups.length} dup., ${ambiguousCount} vágních, ${hallucinationCount} haluc., ${duration4}ms`);
+    }
+
+    // ============================================
+    // TEST 5: ANTI-REPEAT NAPŘÍČ BATCHI
+    // ============================================
+    printTestHeader("TEST #5: ANTI-REPEAT NAPŘÍČ 2 BATCHI", "🔄");
     console.log("Cíl: Ověřit, že se odpovědi neopakují mezi batchi (tvrdá validace)\n");
     
     clearHistory();
     
     // První batch
     console.log("📦 Batch #1:");
-    await initializeBatch('adult');
+    await initializeBatch('adult', null, 'hard');
     stats.apiCalls++;
     
     const batch1 = [];
     for (let i = 0; i < 8; i++) {
-      const q = await generateQuestion('general', 'adult');
+      const q = await generateQuestion('adult', null, 'hard');
       batch1.push(q);
       stats.totalQuestions++;
     }
@@ -344,12 +665,12 @@ async function runTest() {
     
     // Druhý batch (BEZ clearHistory - odpovědi by se neměly opakovat!)
     console.log("\n📦 Batch #2 (bez mazání historie odpovědí):");
-    await initializeBatch('adult');
+    await initializeBatch('adult', null, 'hard');
     stats.apiCalls++;
     
     const batch2 = [];
     for (let i = 0; i < 8; i++) {
-      const q = await generateQuestion('general', 'adult');
+      const q = await generateQuestion('adult', null, 'hard');
       batch2.push(q);
       stats.totalQuestions++;
     }
@@ -376,21 +697,21 @@ async function runTest() {
     stats.duplicateAnswers += crossDupAnswers.length;
     stats.similarPairs += crossSimilar.length;
     
-    const passed3 = crossDupAnswers.length === 0;
-    stats.addResult("Anti-repeat napříč batchi", passed3,
+    const passed5 = crossDupAnswers.length === 0;
+    stats.addResult("Anti-repeat napříč batchi", passed5,
       `${crossDupAnswers.length} duplicitních odpovědí, ${crossSimilar.length} podobných otázek`);
 
     // ============================================
-    // TEST 4: RYCHLOST - CACHE VS API
+    // TEST 6: RYCHLOST - CACHE VS API
     // ============================================
-    printTestHeader("TEST #4: RYCHLOST - CACHE VS API", "⚡");
+    printTestHeader("TEST #6: RYCHLOST - CACHE VS API", "⚡");
     console.log("Cíl: Porovnat rychlost čtení z cache vs API call\n");
     
     clearHistory();
     
     // Měření API call
     const apiStart = Date.now();
-    await initializeBatch('adult');
+    await initializeBatch('adult', null, 'hard');
     const apiDuration = Date.now() - apiStart;
     stats.apiCalls++;
     
@@ -399,7 +720,7 @@ async function runTest() {
     // Měření čtení z cache
     const cacheStart = Date.now();
     for (let i = 0; i < 10; i++) {
-      await generateQuestion('general', 'adult');
+      await generateQuestion('adult', null, 'hard');
       stats.totalQuestions++;
     }
     const cacheDuration = Date.now() - cacheStart;
@@ -415,9 +736,9 @@ async function runTest() {
       `Cache: ${cacheDuration}ms vs API: ${apiDuration}ms`);
 
     // ============================================
-    // TEST 5: SIMULACE HRY (10 kol)
+    // TEST 7: SIMULACE HRY (10 kol)
     // ============================================
-    printTestHeader("TEST #5: SIMULACE HRY - 10 kol", "🎮");
+    printTestHeader("TEST #7: SIMULACE HRY - 10 kol", "🎮");
     console.log("Cíl: Simulovat reálnou hru s 10 otázkami za sebou\n");
     
     clearHistory();
@@ -427,7 +748,7 @@ async function runTest() {
     
     console.log("🎯 Průběh hry:");
     for (let round = 1; round <= 10; round++) {
-      const q = await generateQuestion('general', 'adult');
+      const q = await generateQuestion('adult', null, 'hard');
       gameQuestions.push(q);
       stats.totalQuestions++;
       
@@ -450,9 +771,32 @@ async function runTest() {
     
     stats.duplicateAnswers += gameDupAnswers.length;
     
-    const passed5 = gameDupAnswers.length === 0 && gameDuration < 30000;
-    stats.addResult("Simulace hry (10 kol)", passed5,
+    const passed7 = gameDupAnswers.length === 0 && gameDuration < 30000;
+    stats.addResult("Simulace hry (10 kol)", passed7,
       `${gameDuration}ms celkem, ${gameDupAnswers.length} duplicitních odpovědí`);
+
+    // ============================================
+    // TEST 8: CACHE RESET PŘI ZMĚNĚ REŽIMU
+    // ============================================
+    printTestHeader("TEST #8: CACHE RESET PŘI ZMĚNĚ REŽIMU", "🗑️");
+    console.log("Cíl: Ověřit, že clearQuestionCache() funguje správně\n");
+    
+    clearHistory();
+    
+    // Naplň cache
+    await initializeBatch('adult', null, 'hard');
+    stats.apiCalls++;
+    const cacheBefore = getCacheSize();
+    console.log(`   📦 Cache před resetem: ${cacheBefore} otázek`);
+    
+    // Reset cache
+    clearQuestionCache();
+    const cacheAfter = getCacheSize();
+    console.log(`   🗑️ Cache po resetu: ${cacheAfter} otázek`);
+    
+    const passed8 = cacheBefore > 0 && cacheAfter === 0;
+    stats.addResult("Cache reset", passed8,
+      `Před: ${cacheBefore}, Po: ${cacheAfter}`);
 
     // ============================================
     // FINÁLNÍ VÝSLEDKY
@@ -477,9 +821,13 @@ console.log("⏳ Spouštím testy nové architektury...\n");
 console.log("📌 Požadavky:");
 console.log("   - GROQ_API_KEY v .env souboru");
 console.log("   - npm install groq-sdk\n");
-console.log("📌 Změny v4.0:");
-console.log("   - Odstraněn PREMIUM režim (vlastní témata)");
-console.log("   - Rozšířené kategorie: 12 ADULT, 8 JUNIOR");
-console.log("   - Tvrdá validace duplicitních odpovědí\n");
+console.log("📌 Změny v5.5:");
+console.log("   - Blokace: 'Kdo je považován za jednoho z nejlepších...'");
+console.log("   - Blokace: 'Co létá/plave/běhá?' (příliš obecné)");
+console.log("   - Blokace: 'Jak se jmenuje domácí mazlíček?'");
+console.log("   - Blokace: 'Co děti rády jedí?'");
+console.log("   - Blokace: 'Co je zdraví/láska/štěstí?' (filozofické)");
+console.log("   - Blokace: 'Kdo je nejlepší sportovec?'");
+console.log("   - Celkem 42 vzorů pro vágní otázky\n");
 
 runTest();

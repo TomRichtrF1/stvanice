@@ -165,7 +165,7 @@ export default function FAQ() {
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Brain className="w-5 h-5 text-blue-400" />
-                <span className="text-blue-400 font-bold text-lg">DOSPĚLÍ</span>
+                <span className="text-blue-400 font-bold text-lg">DOSPĚLÝ</span>
               </div>
               <p className="text-slate-300">Otázky z vědy, historie, sportu, kultury, zeměpisu, literatury či gastronomie.</p>
             </div>
@@ -237,7 +237,7 @@ export default function FAQ() {
           </div>
           
           <div className="space-y-3 text-slate-400 text-sm">
-            <p><span className="text-slate-300 font-semibold">Naprogramováno s pomocí:</span> Gemini, Claude, Cursor, Perplexity</p>
+            <p><span className="text-slate-300 font-semibold">Naprogramováno s pomocí:</span> Bolt.new, Gemini, Claude, Cursor, Perplexity</p>
             <p><span className="text-slate-300 font-semibold">Platební služba:</span> Stripe (ověřená a bezpečná)</p>
             <p><span className="text-slate-300 font-semibold">AI model:</span> Groq (Llama)</p>
           </div>

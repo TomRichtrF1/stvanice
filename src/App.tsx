@@ -157,6 +157,20 @@ function App() {
       setDisconnected(true); 
     });
 
+    // 🕐 Unstable connection warning (grace period)
+    socket.on('player_connection_unstable', ({ gracePeriod }) => {
+      console.log(`⚠️ Soupeř má nestabilní připojení (grace period: ${gracePeriod/1000}s)`);
+      // Můžeme zobrazit upozornění uživateli
+    });
+
+    // 🔄 Game state sync při reconnectu
+    socket.on('game_state_sync', (state) => {
+      console.log('🔄 Game state sync:', state);
+      if (state.phase) setPhase(state.phase);
+      if (state.players) setPlayers(state.players);
+      if (state.currentQuestion) setCurrentQuestion(state.currentQuestion);
+    });
+
     return () => {
       socket.off('game_created'); 
       socket.off('game_joined'); 
@@ -170,8 +184,26 @@ function App() {
       socket.off('error'); 
       socket.off('player_disconnected');
       socket.off('start_resolution');
+      socket.off('player_connection_unstable');
+      socket.off('game_state_sync');
     };
   }, [socket]);
+
+  // 📱 Visibility change - oznámit serveru pause/resume
+  useEffect(() => {
+    if (!socket || !roomCode) return;
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        socket.emit('player_paused', { code: roomCode });
+      } else {
+        socket.emit('player_resumed', { code: roomCode });
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [socket, roomCode]);
 
   const handleCreateGame = () => {
     playAmbient(); 
