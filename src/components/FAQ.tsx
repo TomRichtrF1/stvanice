@@ -1,4 +1,4 @@
-import { ArrowLeft, Gamepad2, Target, User, Crown, Tv, Info, Heart, HelpCircle, Zap, Users, Baby, Brain } from 'lucide-react';
+import { ArrowLeft, Gamepad2, Target, Tv, Info, Heart, HelpCircle, Zap, Users, Baby, Brain, Ticket } from 'lucide-react';
 
 export default function FAQ() {
   return (
@@ -45,10 +45,10 @@ export default function FAQ() {
               <span className="text-cyan-400 font-semibold">Vědomostní souboj pro 2 hráče</span> – vhodné pro romantické chvíle ve dvou i do společnosti.
             </p>
             <p>
-              <span className="text-cyan-400 font-semibold">Vznikla pro zábavu, ne pro zisk.</span> Cílem je pobavit, ne vydělat.
+              <span className="text-cyan-400 font-semibold">Hra je zcela ZDARMA</span> s výjimkou divácké místnosti. Vznikla pro zábavu, ne pro zisk. Výnosy z divácké místnosti jsou určeny na pokrytí nákladů na výpočetní výkon a hosting.
             </p>
             <p>
-              <span className="text-cyan-400 font-semibold">Ideální do společnosti</span> – s projektorem a diváckou místností. Dvojice se mohou relativně rychle střídat.
+              <span className="text-cyan-400 font-semibold">Ideální také do společnosti</span> – s projektorem a diváckou místností. Dvojice se mohou relativně rychle střídat.
             </p>
           </div>
         </section>
@@ -69,7 +69,7 @@ export default function FAQ() {
             </div>
             <div className="flex items-start gap-3">
               <span className="text-2xl">👹</span>
-              <p><span className="text-red-400 font-semibold">Lovec honí</span> – snaží se Štavance dohonit</p>
+              <p><span className="text-red-400 font-semibold">Lovec honí</span> – snaží se Štvance dohonit</p>
             </div>
             <div className="flex items-start gap-3">
               <span className="text-2xl">❓</span>
@@ -88,7 +88,7 @@ export default function FAQ() {
           {/* Tip box */}
           <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mt-4">
             <p className="text-yellow-300 text-sm">
-              💡 <span className="font-bold">Tip na zpestření:</span> Pro každý náskok si domluňte odměnu! Menší náskok = větší riziko = lepší odměna. Větší náskok = jistější hra = menší odměna. Od pusy až po tombolu ve společnosti!
+              💡 <span className="font-bold">Tip na zpestření:</span> Pro každý náskok si domluňte odměnu! Menší náskok = větší riziko = lepší odměna.
             </p>
           </div>
         </section>
@@ -108,7 +108,7 @@ export default function FAQ() {
                 <span className="text-2xl">👹</span>
                 <span className="text-red-400 font-bold text-lg">LOVEC vyhrává</span>
               </div>
-              <p className="text-slate-300">Když <span className="text-red-300 font-semibold">dohoní Štavance</span> – dostane se na stejné pole nebo ho předběhne.</p>
+              <p className="text-slate-300">Když <span className="text-red-300 font-semibold">dohoní Štvance</span> – dostane se na stejné pole nebo ho předběhne.</p>
             </div>
             
             <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
@@ -133,16 +133,14 @@ export default function FAQ() {
           <div className="space-y-3">
             {[
               { num: "1", title: "Založení hry", desc: "První hráč založí hru a dostane 6místný kód místnosti" },
-              { num: "2", title: "Volba režimu", desc: "DOSPĚLÍ nebo JUNIOŘI – nutné zvolit před sdílením kódu!", highlight: true },
-              { num: "3", title: "Připojení soupeře", desc: "Nasdílej kód druhému hráči, ten se připojí" },
-              { num: "4", title: "Výběr okruhu", desc: "ZDARMA (náhodná témata) nebo PREMIUM (vlastní téma)" },
-              { num: "5", title: "Výběr rolí", desc: "Lovec vs. Štvanec – kdo klikne první, nechává druhou roli soupeři" },
-              { num: "6", title: "Volba náskoku", desc: "Štvanec volí náskok 2, 3 nebo 4 otázky" },
-              { num: "7", title: "Hra!", desc: "Odpovídejte na otázky a sledujte, kdo vyhraje!" },
+              { num: "2", title: "Připojení soupeře", desc: "Nasdílej kód druhému hráči, ten se připojí" },
+              { num: "3", title: "Výběr rolí a volba témat", desc: "Lovec nebo Štvanec. Změna režimu DOSPĚLÝ / JUNIOR, nebo volba tématického okruhu. Možnost zakoupení vstupenky do divácké místnosti pro společnost – vstupenka platí měsíc, NENÍ aktivováno automatické prodloužení." },
+              { num: "4", title: "Volba náskoku", desc: "Štvanec volí náskok 2, 3 nebo 4 otázky" },
+              { num: "5", title: "Hra!", desc: "Odpovídejte na otázky a sledujte, kdo vyhraje!" },
               { num: "🔄", title: "Odveta", desc: "Po skončení možnost okamžité odvety bez zadávání nového kódu" },
             ].map((step, i) => (
-              <div key={i} className={`flex items-start gap-3 p-3 rounded-xl ${step.highlight ? 'bg-orange-500/10 border border-orange-500/30' : ''}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${step.highlight ? 'bg-orange-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+              <div key={i} className="flex items-start gap-3 p-3 rounded-xl">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 bg-slate-700 text-slate-300">
                   {step.num}
                 </div>
                 <div>
@@ -154,7 +152,7 @@ export default function FAQ() {
           </div>
         </section>
 
-        {/* === SEKCE: REŽIMY === */}
+        {/* === SEKCE: REŽIMY OBTÍŽNOSTI === */}
         <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 space-y-4">
           <div className="flex items-center gap-3">
             <div className="bg-gradient-to-br from-blue-600 to-cyan-600 p-2 rounded-xl">
@@ -169,7 +167,7 @@ export default function FAQ() {
                 <Brain className="w-5 h-5 text-blue-400" />
                 <span className="text-blue-400 font-bold text-lg">DOSPĚLÍ</span>
               </div>
-              <p className="text-slate-300">Náročnější otázky z oblasti vědy, historie, sportu, kultury, zeměpisu a dalších.</p>
+              <p className="text-slate-300">Otázky z vědy, historie, sportu, kultury, zeměpisu, literatury či gastronomie.</p>
             </div>
             
             <div className="bg-pink-500/10 border border-pink-500/30 rounded-xl p-4">
@@ -180,80 +178,51 @@ export default function FAQ() {
               <p className="text-slate-300">Otázky pro děti 8–14 let – pohádky, zvířata, vesmír, sport pro děti a další.</p>
             </div>
           </div>
-        </section>
 
-        {/* === SEKCE: PREMIUM === */}
-        <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-yellow-500/30 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-yellow-600 to-orange-600 p-2 rounded-xl">
-              <Crown className="w-6 h-6 text-white" />
-            </div>
-            <h2 className="text-2xl font-bold text-white">Premium režim</h2>
-            <span className="bg-yellow-500/20 text-yellow-400 text-xs font-bold px-2 py-1 rounded-full">39 Kč/měsíc</span>
-          </div>
-          
-          <div className="space-y-3 text-slate-300">
-            <p>
-              <span className="text-yellow-400 font-semibold">Možnost zadat VLASTNÍ TÉMA otázek.</span>
-            </p>
-            <p>
-              Získáš kód, který ti vydrží měsíc. Není implementována automatická měsíční platba – platíš jen když chceš.
-            </p>
-            <div className="bg-slate-900/50 rounded-xl p-4">
-              <p className="text-slate-400 text-sm mb-2">Příklady témat:</p>
-              <div className="flex flex-wrap gap-2">
-                {["Formule 1", "Evropský fotbal", "České pohádky", "Harry Potter", "Hollywoodské filmy", "2. světová válka"].map((topic, i) => (
-                  <span key={i} className="bg-yellow-500/20 text-yellow-300 text-xs px-2 py-1 rounded-full">
-                    {topic}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mt-4">
-            <p className="text-blue-300 text-sm">
-              💡 <span className="font-bold">Proč Premium existuje?</span><br/>
-              Hra vznikla jako vzdělávací projekt a chce hlavně pobavit. Využívá ale placené služby (AI modely, hosting). Premium pomáhá pokrýt tyto náklady. <span className="text-blue-400 font-semibold">Základní hra je ZDARMA</span> a je sama o sobě plnohodnotná.
+          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 mt-4">
+            <p className="text-cyan-300 text-sm">
+              💡 <span className="font-bold">Tip:</span> Režim můžeš změnit ještě na obrazovce výběru rolí, pak už ne!
             </p>
           </div>
         </section>
 
         {/* === SEKCE: DIVÁCKÁ MÍSTNOST === */}
-        <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-purple-500/30 space-y-4">
+        <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-amber-500/30 space-y-4">
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-purple-600 to-pink-600 p-2 rounded-xl">
+            <div className="bg-gradient-to-br from-amber-600 to-orange-600 p-2 rounded-xl">
               <Tv className="w-6 h-6 text-white" />
             </div>
             <h2 className="text-2xl font-bold text-white">Divácká místnost</h2>
-            <span className="bg-purple-500/20 text-purple-400 text-xs font-bold px-2 py-1 rounded-full">Premium</span>
+            <span className="bg-amber-500/20 text-amber-400 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
+              <Ticket className="w-3 h-3" />
+              139 Kč/měsíc
+            </span>
           </div>
           
           <div className="space-y-3 text-slate-300">
             <p>
-              Speciální stránka pro <span className="text-purple-400 font-semibold">diváky</span> v domácnosti nebo společenské místnosti.
+              Speciální stránka pro <span className="text-amber-400 font-semibold">diváky</span> – ideální na projektor nebo televizi.
             </p>
             <p>
-              Zobrazuje průběh hry v reálném čase <span className="text-purple-400 font-semibold">bez nutnosti sledovat displej hráčů</span>.
-            </p>
-            <p>
-              Ideální na <span className="text-purple-400 font-semibold">projektor nebo televizi</span>.
+              Zobrazuje průběh hry v reálném čase <span className="text-amber-400 font-semibold">bez nutnosti sledovat displej hráčů</span>.
             </p>
           </div>
 
           <div className="bg-slate-900/50 rounded-xl p-4 space-y-2">
             <p className="text-white font-semibold">Jak použít:</p>
             <ol className="text-slate-400 text-sm space-y-1 list-decimal list-inside">
-              <li>Otevři <span className="text-purple-400 font-mono">stvanice.online/divaci</span></li>
-              <li>Zadej kód místnosti (hráči ho vidí na své herní ploše)</li>
-              <li>Zadej Premium kód (stejný jako pro vlastní témata)</li>
-              <li>Sledujte souboj a bavte se!</li>
+              <li>Kup vstupenku (139 Kč na měsíc)</li>
+              <li>Otevři <span className="text-amber-400 font-mono">stvanice.online/divaci</span></li>
+              <li>Zadej kód místnosti (od hráčů)</li>
+              <li>Zadej kód vstupenky</li>
+              <li>Sledujte souboj na velkém plátně!</li>
             </ol>
           </div>
 
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
-            <p className="text-yellow-300 text-sm">
-              💡 <span className="font-bold">Tip:</span> Dvojice se mohou měnit po jednom či více kolech. Skvělá společenská zábava!
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+            <p className="text-blue-300 text-sm">
+              ℹ️ <span className="font-bold">Proč je divácká místnost placená?</span><br/>
+              Samotná hra je ZDARMA. Vstupenka pomáhá pokrýt náklady na provoz (AI, hosting). Jednorázová platba, bez automatického obnovování.
             </p>
           </div>
         </section>
@@ -269,9 +238,7 @@ export default function FAQ() {
           
           <div className="space-y-3 text-slate-400 text-sm">
             <p><span className="text-slate-300 font-semibold">Naprogramováno s pomocí:</span> Gemini, Claude, Cursor, Perplexity</p>
-            <p><span className="text-slate-300 font-semibold">Zdrojový kód:</span> GitHub</p>
             <p><span className="text-slate-300 font-semibold">Platební služba:</span> Stripe (ověřená a bezpečná)</p>
-            <p><span className="text-slate-300 font-semibold">Hosting:</span> Heroku</p>
             <p><span className="text-slate-300 font-semibold">AI model:</span> Groq (Llama)</p>
           </div>
         </section>

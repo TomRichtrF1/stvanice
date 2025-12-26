@@ -30,21 +30,17 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
         {/* Logo a hlavička */}
         <div className="text-center space-y-4">
           <div className="flex justify-center mb-2">
-            {/* NOVÁ IKONA - HONIČKA */}
+            {/* Ikona honička */}
             <div className="relative bg-gradient-to-br from-orange-600 to-red-700 p-6 rounded-3xl shadow-2xl shadow-orange-500/30 transform rotate-3 border-t border-orange-400/50 overflow-hidden group hover:rotate-6 transition-all duration-500 hover:scale-105">
-                {/* Jemný efekt na pozadí ikony */}
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-yellow-400/20 to-transparent opacity-50 group-hover:opacity-70 transition-opacity"></div>
                 
                 {/* Scénka honičky */}
                 <div className="flex items-center gap-1 relative z-10 transform -rotate-3 group-hover:-rotate-6 transition-all duration-500">
-                    {/* Štvanec utíká doleva */}
                     <span className="text-5xl animate-pulse filter drop-shadow-lg transform scale-x-[-1] group-hover:-translate-x-2 transition-transform">🏃</span> 
-                    {/* Pohybové čáry */}
                     <div className="flex space-x-1 opacity-70">
                         <div className="w-2 h-1 bg-yellow-300 rounded-full animate-ping delay-75"></div>
                         <div className="w-2 h-1 bg-orange-300 rounded-full animate-ping delay-150"></div>
                     </div>
-                     {/* Lovec ho honí */}
                     <span className="text-5xl animate-bounce filter drop-shadow-lg delay-100 group-hover:translate-x-2 transition-transform">👹</span> 
                 </div>
             </div>
@@ -65,7 +61,7 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
         {/* Hlavní menu */}
         {!showJoinInput ? (
           <div className="space-y-4">
-            {/* ❓ TLAČÍTKO JAK HRÁT - NOVÉ */}
+            {/* ❓ TLAČÍTKO JAK HRÁT */}
             <a
               href="/faq"
               className="group w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-4 px-8 rounded-2xl text-lg shadow-xl shadow-purple-900/30 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-between border border-purple-500/20"
@@ -104,18 +100,6 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
               </div>
               <div className="text-blue-100 text-sm font-semibold bg-blue-700/30 px-3 py-1 rounded-full">Mám kód</div>
             </button>
-
-            {/* DIVÁCKÁ MÍSTNOST - decentní odkaz */}
-            <div className="text-center pt-2">
-              <a
-                href="/divaci"
-                className="text-slate-500 hover:text-purple-400 text-sm transition-colors inline-flex items-center gap-2"
-              >
-                <span>👁️</span>
-                <span>Divácká místnost</span>
-                <span className="text-purple-400/70 text-xs">⭐ premium</span>
-              </a>
-            </div>
           </div>
         ) : (
           /* Vstup pro kód */
@@ -159,14 +143,24 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
         )}
       </div>
       
-      {/* Footer s FAQ odkazem */}
-      <div className="absolute bottom-6 text-center space-y-2">
-        <a 
-          href="/faq" 
-          className="text-slate-500 hover:text-cyan-400 text-xs transition-colors"
-        >
-          ❓ Pravidla hry
-        </a>
+      {/* Footer s odkazy */}
+      <div className="absolute bottom-6 left-0 right-0 text-center space-y-2">
+        <div className="flex items-center justify-center gap-4 text-sm">
+          <a 
+            href="/faq" 
+            className="text-slate-500 hover:text-cyan-400 transition-colors"
+          >
+            ❓ Pravidla hry
+          </a>
+          <span className="text-slate-700">•</span>
+          <a
+            href="/divaci"
+            className="text-slate-500 hover:text-purple-400 transition-colors inline-flex items-center gap-1"
+          >
+            <span>👁️</span>
+            <span>Divácká místnost</span>
+          </a>
+        </div>
         <div className="text-slate-600 text-xs font-mono opacity-50 hover:opacity-100 transition-opacity">
           ŠTVANICE ONLINE (beta) • Kvízová hra pro dva
         </div>

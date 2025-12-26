@@ -27,6 +27,20 @@
       "createdAt": "2025-12-24T15:12:45.367Z",
       "expiresAt": "2026-01-23T15:12:45.367Z",
       "used": false
+    },
+    {
+      "code": "8OK6-4NKL-QS5A",
+      "topic": "spectator_access",
+      "createdAt": "2025-12-26T11:43:53.269Z",
+      "expiresAt": "2026-01-25T11:43:53.269Z",
+      "used": false
+    },
+    {
+      "code": "71IH-5ABJ-X44G",
+      "topic": "spectator_access",
+      "createdAt": "2025-12-26T11:52:54.297Z",
+      "expiresAt": "2026-01-25T11:52:54.297Z",
+      "used": false
     }
   ]
 }

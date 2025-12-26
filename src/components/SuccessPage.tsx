@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Copy, AlertCircle, Loader } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle, Copy, Loader, AlertCircle, Ticket, Eye, Check } from 'lucide-react';
 
 export default function SuccessPage() {
   const [code, setCode] = useState<string | null>(null);
@@ -9,43 +8,45 @@ export default function SuccessPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const sessionId = searchParams.get('session_id');
+    const fetchCode = async () => {
+      // Získej session_id z URL (bez react-router-dom)
+      const urlParams = new URLSearchParams(window.location.search);
+      const sessionId = urlParams.get('session_id');
 
-    if (!sessionId) {
-      setError('Chybí session ID');
-      setLoading(false);
-      return;
-    }
+      if (!sessionId) {
+        setError('Chybí ID platby. Zkuste to znovu nebo kontaktujte podporu.');
+        setLoading(false);
+        return;
+      }
 
-    console.log('🔍 Načítám kód pro session:', sessionId);
+      console.log('🔍 Načítám kód pro session:', sessionId);
 
-    // Získej kód ze serveru
-    fetch(`/api/get-session-code?session_id=${sessionId}`)
-      .then(res => {
-        console.log('📡 API odpověď:', res.status);
-        return res.json();
-      })
-      .then(data => {
+      try {
+        const response = await fetch(`/api/get-session-code?session_id=${sessionId}`);
+        const data = await response.json();
+
         console.log('📦 Data z API:', data);
+
         if (data.error) {
           setError(data.error);
-        } else {
+        } else if (data.code) {
           setCode(data.code);
           setExpiresAt(data.expiresAt);
+        } else {
+          setError('Kód nebyl nalezen. Kontaktujte podporu.');
         }
+      } catch (err) {
+        console.error('❌ Chyba při načítání kódu:', err);
+        setError('Nepodařilo se načíst kód. Zkuste obnovit stránku.');
+      } finally {
         setLoading(false);
-      })
-      .catch(err => {
-        console.error('❌ Error fetching code:', err);
-        setError('Nepodařilo se načíst kód');
-        setLoading(false);
-      });
-  }, [searchParams]);
+      }
+    };
+
+    fetchCode();
+  }, []);
 
   const handleCopy = () => {
     if (code) {
@@ -58,71 +59,88 @@ export default function SuccessPage() {
   const handleConfirm = () => {
     setConfirmed(true);
     setTimeout(() => {
-      navigate('/');
+      window.location.href = '/';
     }, 1500);
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
         <div className="text-center space-y-4">
-          <Loader className="w-16 h-16 text-cyan-500 animate-spin mx-auto" />
-          <p className="text-white text-xl">Načítám herní kód...</p>
+          <Loader className="w-16 h-16 text-amber-500 animate-spin mx-auto" />
+          <p className="text-white text-xl">Načítám vaši vstupenku...</p>
         </div>
       </div>
     );
   }
 
+  // Error state
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-slate-800 rounded-3xl p-8 border-2 border-red-500/50">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white text-center mb-4">Chyba</h2>
-          <p className="text-slate-300 text-center mb-6">{error}</p>
-          <button
-            onClick={() => navigate('/')}
-            className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-xl transition-all"
+        <div className="w-full max-w-md space-y-6">
+          <div className="bg-slate-800 rounded-3xl p-8 border-2 border-red-500/50">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white text-center mb-4">Něco se pokazilo</h2>
+            <p className="text-slate-300 text-center mb-6">{error}</p>
+          </div>
+          
+          <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+            <p className="text-slate-400 text-sm text-center">
+              Pokud byla platba stržena, kontaktujte nás na{' '}
+              <a href="mailto:tomas.richtr@csgai.cz" className="text-cyan-400 hover:underline">
+                tomas.richtr@csgai.cz
+              </a>
+              {' '}a pošlete nám ID platby z emailu od Stripe.
+            </p>
+          </div>
+
+          <a
+            href="/"
+            className="block w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 rounded-xl transition-all text-center"
           >
             Zpět na hlavní stránku
-          </button>
+          </a>
         </div>
       </div>
     );
   }
 
+  // Success state
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6 animate-fade-in">
         
         {/* Success header */}
         <div className="text-center space-y-4">
-          <div className="bg-gradient-to-br from-green-600 to-emerald-600 p-6 rounded-full w-24 h-24 mx-auto flex items-center justify-center shadow-2xl shadow-green-500/30">
-            <Check className="w-16 h-16 text-white" />
+          <div className="bg-gradient-to-br from-amber-600 to-orange-600 p-6 rounded-full w-24 h-24 mx-auto flex items-center justify-center shadow-2xl shadow-amber-500/30">
+            <Ticket className="w-12 h-12 text-white" />
           </div>
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
+          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">
             Platba úspěšná!
           </h1>
           <p className="text-slate-400 text-lg">
-            Tvůj herní kód je připravený
+            Tvoje vstupenka do divácké místnosti je připravena
           </p>
         </div>
 
         {/* Code display */}
-        <div className="bg-slate-800 rounded-3xl p-8 border-2 border-yellow-500/50 shadow-2xl space-y-6">
+        <div className="bg-slate-800 rounded-3xl p-8 border-2 border-amber-500/50 shadow-2xl space-y-6">
           
           {/* Code */}
-          <div className="bg-slate-900/50 rounded-2xl p-6 border border-yellow-500/30">
-            <p className="text-slate-400 text-xs uppercase tracking-wider text-center mb-3">
-              Tvůj Premium Herní Kód
+          <div className="bg-slate-900/50 rounded-2xl p-6 border border-amber-500/30">
+            <p className="text-slate-400 text-xs uppercase tracking-wider text-center mb-3 flex items-center justify-center gap-2">
+              <Eye size={14} />
+              Tvůj kód do divácké místnosti
             </p>
             <div className="flex items-center justify-center gap-3">
-              <p className="text-5xl font-mono font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-400 tracking-wider">
+              <p className="text-5xl font-mono font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400 tracking-wider">
                 {code}
               </p>
               <button
                 onClick={handleCopy}
-                className="p-3 bg-yellow-600 hover:bg-yellow-500 rounded-xl transition-colors shadow-lg"
+                className="p-3 bg-amber-600 hover:bg-amber-500 rounded-xl transition-colors shadow-lg"
                 title="Zkopírovat kód"
               >
                 <Copy className="w-6 h-6 text-white" />
@@ -138,7 +156,7 @@ export default function SuccessPage() {
           {/* Expiration */}
           {expiresAt && (
             <div className="text-center text-slate-400 text-sm">
-              Platnost do: <strong className="text-yellow-400">{new Date(expiresAt).toLocaleDateString('cs-CZ')}</strong>
+              Platnost do: <strong className="text-amber-400">{new Date(expiresAt).toLocaleDateString('cs-CZ')}</strong>
             </div>
           )}
 
@@ -155,13 +173,13 @@ export default function SuccessPage() {
 
         {/* Confirmation */}
         {!confirmed ? (
-          <div className="bg-slate-800/80 rounded-2xl p-6 border border-yellow-500/30">
-            <p className="text-yellow-300 text-center font-bold mb-4">
-              MÁŠ HERNÍ KÓD POZNAMENÁN?
+          <div className="bg-slate-800/80 rounded-2xl p-6 border border-amber-500/30">
+            <p className="text-amber-300 text-center font-bold mb-4">
+              MÁŠ KÓD POZNAMENÁN?
             </p>
             <button
               onClick={handleConfirm}
-              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg transform hover:scale-105 active:scale-95"
+              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg transform hover:scale-105 active:scale-95"
             >
               ANO, MÁM HO
             </button>
@@ -174,11 +192,13 @@ export default function SuccessPage() {
         )}
 
         {/* Info */}
-        <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
-          <p className="text-blue-300 text-xs text-center">
-            💡 <strong>Tento kód ti umožňuje zadávat vlastní témata!</strong><br/>
-            Použij ho kdykoliv během měsíce. Při každém použití můžeš zadat jiné téma.<br/>
-            Příklad: Dnes "Fotbal Itálie", zítra "Česká fyzika"
+        <div className="bg-amber-900/20 border border-amber-500/30 rounded-xl p-4">
+          <p className="text-amber-300 text-xs text-center">
+            👁️ <strong>Jak použít vstupenku:</strong><br/>
+            1. Přejdi na stvanice.online/divaci<br/>
+            2. Zadej kód místnosti (6 znaků od hráčů)<br/>
+            3. Zadej tento kód vstupenky<br/>
+            4. Sleduj hru na velkém plátně!
           </p>
         </div>
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Eye, AlertCircle, Loader, Trophy, Check, X, Clock, Home, HelpCircle } from 'lucide-react';
+import { Eye, AlertCircle, Loader, Trophy, Check, X, Clock, Home, HelpCircle, Ticket } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 interface Player {
@@ -23,17 +23,16 @@ interface GameState {
   settings: {
     mode: 'adult' | 'kid';
     topic: string;
-    isPremium: boolean;
   };
   headstart: number | null;
 }
 
 export default function SpectatorView() {
-  // 🎬 Kód hry zadá uživatel na stránce (ne z URL)
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [socketConnected, setSocketConnected] = useState(false); // Socket připojení
   const [gameCode, setGameCode] = useState('');
   const [premiumCode, setPremiumCode] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(false); // Připojeno ke hře
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   
@@ -45,17 +44,17 @@ export default function SpectatorView() {
   const [correctAnswer, setCorrectAnswer] = useState<number | null>(null);
   const [winner, setWinner] = useState<'hunter' | 'prey' | null>(null);
   
-  // 🎬 NOVÉ: Animované pozice pro plynulý pohyb
+  // Animované pozice
   const [displayHunterPos, setDisplayHunterPos] = useState(0);
   const [displayPreyPos, setDisplayPreyPos] = useState(0);
   
-  // 🎬 NOVÉ: Audio refs
+  // Audio refs
   const stepAudioRef = useRef<HTMLAudioElement | null>(null);
   const correctAudioRef = useRef<HTMLAudioElement | null>(null);
   const wrongAudioRef = useRef<HTMLAudioElement | null>(null);
   const resolutionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // 🎬 Inicializace audia
+  // Inicializace audia
   useEffect(() => {
     stepAudioRef.current = new Audio('/sounds/step.mp3');
     correctAudioRef.current = new Audio('/sounds/correct.mp3');
@@ -63,7 +62,7 @@ export default function SpectatorView() {
     resolutionAudioRef.current = new Audio('/sounds/resolution.mp3');
   }, []);
 
-  // 🎬 Funkce pro přehrání zvuku
+  // Funkce pro přehrání zvuku
   const playSound = (sound: 'step' | 'correct' | 'wrong' | 'resolution') => {
     try {
       const audioMap = {
@@ -85,6 +84,22 @@ export default function SpectatorView() {
     const newSocket = io(window.location.origin, {
       transports: ['websocket', 'polling']
     });
+    
+    newSocket.on('connect', () => {
+      console.log('🔌 Socket připojen:', newSocket.id);
+      setSocketConnected(true);
+    });
+    
+    newSocket.on('disconnect', () => {
+      console.log('🔌 Socket odpojen');
+      setSocketConnected(false);
+    });
+    
+    newSocket.on('connect_error', (err) => {
+      console.error('🔌 Socket connection error:', err);
+      setError('Chyba připojení k serveru');
+    });
+    
     setSocket(newSocket);
 
     return () => {
@@ -103,17 +118,11 @@ export default function SpectatorView() {
       setLoading(false);
       setError(null);
       
-      // Nastav existující pozice
+      // Nastav počáteční pozice
       const hunter = state.players.find(p => p.role === 'hunter');
       const prey = state.players.find(p => p.role === 'prey');
       if (hunter) setDisplayHunterPos(hunter.position);
       if (prey) setDisplayPreyPos(prey.position);
-      
-      // Nastav existující odpovědi pokud jsou
-      state.players.forEach(p => {
-        if (p.role === 'hunter' && p.answer !== null) setHunterAnswer(p.answer);
-        if (p.role === 'prey' && p.answer !== null) setPreyAnswer(p.answer);
-      });
     });
 
     socket.on('spectator_error', ({ message }) => {
@@ -126,12 +135,10 @@ export default function SpectatorView() {
       setGameState(state);
     });
 
-    // Game events
     socket.on('phase_change', ({ phase }) => {
       setGameState(prev => prev ? { ...prev, phase } : null);
       
-      // 🎬 RESET při nové hře (rematch)
-      if (phase === 'role_selection' || phase === 'topic_selection') {
+      if (phase === 'role_selection') {
         setWinner(null);
         setHunterAnswer(null);
         setPreyAnswer(null);
@@ -171,7 +178,6 @@ export default function SpectatorView() {
     });
 
     socket.on('start_resolution', () => {
-      // 🎬 Přehraj zvuk napětí
       playSound('resolution');
     });
 
@@ -179,11 +185,10 @@ export default function SpectatorView() {
       setCorrectAnswer(correct);
       setShowResults(true);
       
-      // 🎬 Přehraj zvuk správné/špatné odpovědi
       const hunterResult = results.find((r: any) => r.role === 'hunter');
       const preyResult = results.find((r: any) => r.role === 'prey');
       
-      // Aktualizuj SKUTEČNÉ pozice v gameState
+      // Aktualizuj pozice v gameState
       setGameState(prev => {
         if (!prev) return null;
         const updatedPlayers = prev.players.map(p => {
@@ -193,7 +198,7 @@ export default function SpectatorView() {
         return { ...prev, players: updatedPlayers };
       });
       
-      // 🎬 ANIMACE: Po 2 sekundách animuj pohyb figurek
+      // Animace pohybu figurek
       setTimeout(() => {
         if (hunterResult) {
           const newPos = hunterResult.position;
@@ -213,8 +218,6 @@ export default function SpectatorView() {
     });
 
     socket.on('waiting_for_ready', () => {
-      // 🎬 DŮLEŽITÉ: NEMĚNÍME showResults! Výsledky zůstanou viditelné
-      // dokud nepřijde next_question
       setGameState(prev => prev ? { ...prev, phase: 'waiting_for_ready' } : null);
     });
 
@@ -233,14 +236,12 @@ export default function SpectatorView() {
         return { ...prev, players: updatedPlayers };
       });
       
-      // 🎬 Nastav počáteční pozice
       const hunter = positions.find((p: any) => p.role === 'hunter');
       const prey = positions.find((p: any) => p.role === 'prey');
       if (hunter) setDisplayHunterPos(hunter.position);
       if (prey) setDisplayPreyPos(prey.position);
     });
 
-    // 🎬 NOVÉ: Aktualizuj role při rematchi
     socket.on('roles_updated', ({ players: updatedPlayers }) => {
       setGameState(prev => {
         if (!prev) return null;
@@ -254,7 +255,6 @@ export default function SpectatorView() {
       setDisplayPreyPos(0);
     });
 
-    // 🎬 OPRAVA: Ukončit hru když hráč odejde
     socket.on('player_disconnected', () => {
       setError('Hráč se odpojil. Hra byla ukončena.');
       setIsConnected(false);
@@ -280,18 +280,47 @@ export default function SpectatorView() {
   }, [socket, displayHunterPos, displayPreyPos]);
 
   const handleJoin = () => {
-    if (!socket || !gameCode || !premiumCode) return;
+    if (!socket) {
+      setError('Socket není inicializován');
+      return;
+    }
+    
+    if (!socketConnected) {
+      setError('Čekám na připojení k serveru...');
+      return;
+    }
+    
+    if (!gameCode || !premiumCode) {
+      setError('Vyplň oba kódy');
+      return;
+    }
+    
+    console.log('🎬 Připojuji se ke hře:', {
+      gameCode: gameCode.toUpperCase(),
+      premiumCode: premiumCode.toUpperCase(),
+      socketId: socket.id,
+      connected: socket.connected
+    });
     
     setLoading(true);
     setError(null);
+    
     socket.emit('join_as_spectator', { 
       gameCode: gameCode.toUpperCase(), 
       premiumCode: premiumCode.toUpperCase() 
     });
+    
+    // Timeout pro případ že server neodpoví
+    setTimeout(() => {
+      if (loading && !isConnected) {
+        setLoading(false);
+        setError('Server neodpovídá. Zkus to znovu nebo ověř, že hra stále běží.');
+      }
+    }, 10000);
   };
 
-  // 🎬 Handler pro nákup premium kódu přes Stripe
-  const handleBuyCode = async () => {
+  // Handler pro nákup vstupenky
+  const handleBuyTicket = async () => {
     try {
       const response = await fetch('/api/create-checkout-session', {
         method: 'POST',
@@ -305,7 +334,6 @@ export default function SpectatorView() {
         return;
       }
 
-      // Přesměruj na Stripe Checkout
       window.location.href = data.url;
     } catch (err) {
       console.error('Error creating checkout:', err);
@@ -321,7 +349,6 @@ export default function SpectatorView() {
           
           {/* Header s logem */}
           <div className="text-center space-y-4">
-            {/* Logo ŠTVANICE */}
             <div className="flex justify-center mb-4">
               <div className="relative bg-gradient-to-br from-orange-600 to-red-700 p-5 rounded-2xl shadow-xl shadow-orange-500/30 transform rotate-2 border-t border-orange-400/50 overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-yellow-400/20 to-transparent opacity-50"></div>
@@ -340,19 +367,19 @@ export default function SpectatorView() {
             </h1>
             <div className="flex items-center justify-center gap-2 bg-purple-900/30 px-4 py-2 rounded-full border border-purple-500/30">
               <Eye className="w-5 h-5 text-purple-400" />
-              <span className="text-purple-300 font-bold text-sm uppercase tracking-wider">Režim Diváka</span>
+              <span className="text-purple-300 font-bold text-sm uppercase tracking-wider">Divácká místnost</span>
             </div>
             <p className="text-slate-400">
-              Sleduj hru přátel v reálném čase
+              Sleduj hru přátel v reálném čase na velkém plátně
             </p>
           </div>
 
           {/* Premium upozornění */}
-          <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-4">
-            <p className="text-yellow-300 text-sm text-center">
-              ⭐ <strong>PREMIUM FUNKCE</strong><br/>
-              <span className="text-yellow-200/70 text-xs">
-                Pro sledování hry potřebuješ platný prémiový kód
+          <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4">
+            <p className="text-purple-300 text-sm text-center">
+              🎫 <strong>PRÉMIOVÁ FUNKCE</strong><br/>
+              <span className="text-purple-200/70 text-xs">
+                Pro sledování hry potřebuješ platnou vstupenku do divácké místnosti
               </span>
             </p>
           </div>
@@ -363,7 +390,7 @@ export default function SpectatorView() {
             {/* Game Code */}
             <div>
               <label className="block text-cyan-400 text-sm uppercase tracking-wider font-bold mb-2">
-                Kód hry (z lobby)
+                Kód hry (od hráčů)
               </label>
               <input
                 type="text"
@@ -380,15 +407,15 @@ export default function SpectatorView() {
 
             {/* Premium Code */}
             <div>
-              <label className="block text-yellow-400 text-sm uppercase tracking-wider font-bold mb-2">
-                Tvůj premium kód
+              <label className="block text-purple-400 text-sm uppercase tracking-wider font-bold mb-2">
+                Kód vstupenky
               </label>
               <input
                 type="text"
                 value={premiumCode}
                 onChange={(e) => setPremiumCode(e.target.value.toUpperCase())}
-                placeholder="XXXX-XXXX-XX"
-                className="w-full bg-slate-900/80 text-white text-xl font-mono font-bold text-center py-4 rounded-xl border-2 border-slate-600 focus:border-yellow-400 focus:outline-none transition-all uppercase tracking-wider"
+                placeholder="XXXX-XXXX-XXXX"
+                className="w-full bg-slate-900/80 text-white text-xl font-mono font-bold text-center py-4 rounded-xl border-2 border-slate-600 focus:border-purple-400 focus:outline-none transition-all uppercase tracking-wider"
               />
             </div>
 
@@ -403,13 +430,18 @@ export default function SpectatorView() {
             {/* Submit */}
             <button
               onClick={handleJoin}
-              disabled={loading || gameCode.length !== 6 || !premiumCode}
-              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:from-slate-700 disabled:to-slate-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg disabled:shadow-none flex items-center justify-center gap-3"
+              disabled={loading || gameCode.length !== 6 || !premiumCode || !socketConnected}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-slate-700 disabled:to-slate-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg disabled:shadow-none flex items-center justify-center gap-3"
             >
-              {loading ? (
+              {!socketConnected ? (
                 <>
                   <Loader className="w-6 h-6 animate-spin" />
-                  Připojuji...
+                  Připojuji k serveru...
+                </>
+              ) : loading ? (
+                <>
+                  <Loader className="w-6 h-6 animate-spin" />
+                  Připojuji ke hře...
                 </>
               ) : (
                 <>
@@ -421,23 +453,24 @@ export default function SpectatorView() {
           </div>
 
           {/* Footer s nákupem */}
-          <div className="bg-slate-800/50 rounded-xl p-4 text-center space-y-2">
-            <p className="text-slate-400 text-sm">
-              Lze použít stejný premium kód jako pro hráčskou volbu témat.
-            </p>
+          <div className="bg-slate-800/50 rounded-xl p-4 text-center space-y-3">
             <p className="text-slate-300 text-sm">
-              Nemáš premium kód?{' '}
-              <button 
-                onClick={handleBuyCode}
-                className="text-yellow-400 hover:text-yellow-300 font-bold underline underline-offset-2 transition-colors"
-              >
-                Kup zde za 39 Kč
-              </button>
-              {' '}s platností na měsíc.
+              Nemáš vstupenku?
+            </p>
+            <button 
+              onClick={handleBuyTicket}
+              className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 mx-auto shadow-lg shadow-amber-500/20"
+            >
+              <Ticket className="w-5 h-5" />
+              <span>KOUPIT VSTUPENKU</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">139 Kč/měsíc</span>
+            </button>
+            <p className="text-slate-500 text-xs">
+              Jednorázová platba, bez automatického obnovování
             </p>
           </div>
 
-          {/* ❓ FAQ odkaz */}
+          {/* FAQ odkaz */}
           <div className="text-center pt-2">
             <a
               href="/faq"
@@ -488,8 +521,8 @@ export default function SpectatorView() {
     );
   }
 
-  // === WAITING STATES ===
-  if (!gameState || gameState.phase === 'lobby' || gameState.phase === 'topic_selection' || gameState.phase === 'role_selection' || gameState.phase === 'headstart_selection') {
+  // === WAITING STATES (bez topic_selection) ===
+  if (!gameState || gameState.phase === 'lobby' || gameState.phase === 'role_selection' || gameState.phase === 'headstart_selection') {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col items-center justify-center p-4">
         <div className="text-center space-y-6 animate-fade-in">
@@ -513,18 +546,18 @@ export default function SpectatorView() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4">
       <div className="max-w-6xl mx-auto space-y-4">
         
-        {/* 🎬 Header s kódem a režimem */}
+        {/* Header */}
         <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-4 py-2">
           <div className="flex items-center gap-2">
             <Eye className="w-5 h-5 text-purple-500" />
-            <span className="text-purple-400 font-bold text-sm">REŽIM DIVÁKA</span>
+            <span className="text-purple-400 font-bold text-sm">DIVÁCKÁ MÍSTNOST</span>
           </div>
           <span className="text-slate-300 font-mono text-sm">
             HRA <span className="text-cyan-400 font-bold">{gameCode}</span> - REŽIM <span className="text-yellow-400 font-bold">{modeText}</span>
           </span>
         </div>
 
-        {/* 🎬 Logo ŠTVANICE - menší na wide screenech */}
+        {/* Logo */}
         <div className="text-center py-2 lg:py-1">
           <div className="flex justify-center mb-2">
             <div className="relative bg-gradient-to-br from-orange-600 to-red-700 p-3 lg:p-2 rounded-2xl shadow-xl shadow-orange-500/30 transform rotate-2 border-t border-orange-400/50 overflow-hidden">
@@ -544,10 +577,10 @@ export default function SpectatorView() {
           </h1>
         </div>
 
-        {/* 🎬 RESPONZIVNÍ LAYOUT: Mobile = pod sebou, Desktop = vedle sebe */}
+        {/* Responzivní layout */}
         <div className="lg:flex lg:gap-6">
           
-          {/* Game Board - vlevo na desktopu */}
+          {/* Game Board */}
           <div className="lg:w-1/2">
             <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
               
@@ -611,10 +644,10 @@ export default function SpectatorView() {
             </div>
           </div>
 
-          {/* Question panel - vpravo na desktopu */}
+          {/* Question panel */}
           <div className="lg:w-1/2 mt-4 lg:mt-0">
             
-            {/* 🎬 OPRAVENO: Zobraz otázku i výsledky i během waiting_for_ready */}
+            {/* Otázka a výsledky */}
             {(gameState.phase === 'playing' || (gameState.phase === 'waiting_for_ready' && showResults)) && gameState.currentQuestion && (
               <div className="bg-slate-800/80 rounded-2xl p-6 border border-slate-700 space-y-4">
                 
@@ -684,15 +717,33 @@ export default function SpectatorView() {
                     <p className="text-slate-400">🏃 Štvanec odpověděl, čekám na Lovce...</p>
                   )}
                   {showResults && (
-                    <p className="text-cyan-400 font-bold animate-pulse">
-                      ✓ Vyhodnoceno • Čekám na hráče...
-                    </p>
+                    <>
+                      <p className="text-cyan-400 font-bold animate-pulse">
+                        ✓ Vyhodnoceno • Čekám na hráče...
+                      </p>
+                      
+                      {/* 🔍 Perplexity fact-check odkaz */}
+                      {gameState.currentQuestion && correctAnswer !== null && (
+                        <a
+                          href={`https://www.perplexity.ai/search?q=${encodeURIComponent(
+                            gameState.currentQuestion.question + ' správná odpověď ' + gameState.currentQuestion.options[correctAnswer]
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-slate-500 hover:text-purple-400 text-xs mt-2 transition-colors"
+                        >
+                          <span>🔍</span>
+                          <span>Ověřit na Perplexity</span>
+                          <span className="text-[10px]">↗</span>
+                        </a>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Waiting for ready - POUZE pokud NEMÁME výsledky k zobrazení */}
+            {/* Waiting for ready */}
             {gameState.phase === 'waiting_for_ready' && !showResults && (
               <div className="bg-slate-800/80 rounded-2xl p-6 border border-slate-700 text-center">
                 <Loader className="w-12 h-12 text-cyan-500 animate-spin mx-auto mb-4" />

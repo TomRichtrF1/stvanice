@@ -7,7 +7,7 @@ import Stripe from 'stripe';
 import fs from 'fs';
 import path from 'path';
 // ZDE JE IMPORT NAŠEHO NOVÉHO MOZKU:
-import { generateQuestion } from './question_generator.js';
+import { generateQuestion, getCategories, ADULT_CATEGORIES, JUNIOR_CATEGORIES } from './question_generator.js';
 // IMPORT CODE MANAGERU:
 import { validateCode, createGameCode, cleanupExpiredCodes } from './CodeManager.js';
 
@@ -37,7 +37,7 @@ const games = new Map();
 
 // === API ENDPOINTY ===
 
-// Endpoint pro validaci herního kódu
+// Endpoint pro validaci herního kódu (pro diváckou místnost)
 app.post('/api/validate-code', (req, res) => {
   const { code } = req.body;
   
@@ -51,17 +51,11 @@ app.post('/api/validate-code', (req, res) => {
 
 // Endpoint pro testovací generování kódu (DEBUG - ODSTRANIT V PRODUKCI)
 app.get('/api/generate-test-code', (req, res) => {
-  const { topic } = req.query;
-  
-  if (!topic) {
-    return res.status(400).json({ error: 'Chybí téma (parametr ?topic=...)' });
-  }
-  
-  const gameCode = createGameCode(topic);
+  const gameCode = createGameCode('spectator_access');
   res.json({ 
     success: true, 
     code: gameCode.code,
-    topic: gameCode.topic,
+    type: 'spectator_access',
     expiresAt: gameCode.expiresAt
   });
 });
@@ -72,15 +66,46 @@ app.get('/api/cleanup-codes', (req, res) => {
   res.json({ success: true, removed });
 });
 
+// 🔍 DEBUG: Endpoint pro kontrolu aktivních her
+app.get('/api/debug/games', (req, res) => {
+  const gamesList = Array.from(games.entries()).map(([code, game]) => ({
+    code,
+    phase: game.phase,
+    playersCount: game.players.length,
+    spectatorsCount: game.spectators?.length || 0,
+    mode: game.settings?.mode
+  }));
+  
+  res.json({
+    totalGames: games.size,
+    games: gamesList,
+    serverTime: new Date().toISOString()
+  });
+});
+
+// 📚 API: Získání kategorií podle módu
+app.get('/api/categories/:mode', (req, res) => {
+  const { mode } = req.params;
+  const categories = mode === 'kid' ? JUNIOR_CATEGORIES : ADULT_CATEGORIES;
+  
+  const categoryList = Object.entries(categories).map(([key, cat]) => ({
+    key,
+    name: cat.name,
+    aspectCount: cat.aspects.length
+  }));
+  
+  res.json({ mode, categories: categoryList });
+});
+
 // === STRIPE ENDPOINTY ===
 
-// ✅✅✅ NOVÁ VERZE: Vytvoření kódu JIŽ PŘI VYTVOŘENÍ PLATBY ✅✅✅
+// ✅ VSTUPENKA DO DIVÁCKÉ MÍSTNOSTI - 139 Kč/měsíc
 app.post('/api/create-checkout-session', async (req, res) => {
   try {
-    // 🎫 VYGENERUJ KÓD JIŽ TEĎKA (před platbou)
-    const gameCode = createGameCode('premium');
+    // 🎫 VYGENERUJ KÓD PRO DIVÁCKOU MÍSTNOST
+    const gameCode = createGameCode('spectator_access');
     
-    console.log(`🎫 Vytvořen předběžný kód pro checkout: ${gameCode.code}`);
+    console.log(`🎫 Vytvořen kód pro diváckou místnost: ${gameCode.code}`);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -89,10 +114,10 @@ app.post('/api/create-checkout-session', async (req, res) => {
           price_data: {
             currency: 'czk',
             product_data: {
-              name: 'Štvanice - Premium Herní Kód',
-              description: 'Měsíční přístup k vlastním tématům otázek',
+              name: 'Štvanice - Vstupenka do divácké místnosti',
+              description: 'Měsíční přístup do divácké místnosti pro sledování her',
             },
-            unit_amount: 3900, // 39 Kč v haléřích
+            unit_amount: 13900, // 139 Kč v haléřích
           },
           quantity: 1,
         },
@@ -105,7 +130,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       metadata: {
         game_code: gameCode.code,
         expires_at: gameCode.expiresAt,
-        topic: gameCode.topic
+        type: 'spectator_access'
       }
     });
 
@@ -137,18 +162,14 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
     const session = event.data.object;
     const gameCode = session.metadata.game_code;
     
-    console.log(`✅ Platba potvrzena! Kód z metadata: ${gameCode}`);
-    console.log(`💡 Kód je platný 30 dní a umožňuje zadávat vlastní témata`);
-    
-    // Kód je již vytvořen v codes.json (při vytvoření checkout session)
-    // Můžeš zde poslat email s kódem (např. přes SendGrid)
-    // sendEmail(session.customer_email, gameCode);
+    console.log(`✅ Platba potvrzena! Kód pro diváckou místnost: ${gameCode}`);
+    console.log(`💡 Kód je platný 30 dní a umožňuje přístup do divácké místnosti`);
   }
 
   res.json({ received: true });
 });
 
-// ✅✅✅ NOVÁ VERZE: Success page - KÓD Z STRIPE METADATA ✅✅✅
+// ✅ Success page - KÓD Z STRIPE METADATA
 app.get('/api/get-session-code', async (req, res) => {
   try {
     const { session_id } = req.query;
@@ -214,9 +235,6 @@ function resetGame(roomCode) {
   game.headstart = null;
   game.currentQuestion = null;
   game.rematchRequested = {};
-  
-  // ✅ Zachováme nastavení (mode, topic, gameCode), aby se nemuselo znovu klikat
-  // Toto zajistí, že při rematchi nemusí hráči zadávat kód znovu!
 
   game.players.forEach(player => {
     player.role = null;
@@ -245,15 +263,14 @@ io.on('connection', (socket) => {
     const gameState = {
       code: roomCode,
       players: [{ id: socket.id, role: null, position: 0, answer: null, ready: false }],
-      spectators: [], // 🎬 NOVÉ: Seznam diváků
+      spectators: [], // 🎬 Seznam diváků
       phase: 'lobby',
       
-      // === NOVÉ NASTAVENÍ ===
+      // === NASTAVENÍ HRY ===
       settings: {
-        mode: 'adult', // Výchozí: dospělí
-        topic: 'general', // Výchozí: náhodná témata
-        isPremium: false, // Jestli je použit premium kód
-        gameCode: null // Aktivní premium kód (pro session tracking)
+        mode: 'adult',      // Výchozí: dospělí
+        topic: 'general',   // Zachováno pro kompatibilitu
+        category: null,     // null = mix všech, nebo 'motorsport', 'film', ...
       },
       
       headstart: null,
@@ -267,39 +284,58 @@ io.on('connection', (socket) => {
     console.log(`Game created: ${roomCode}`);
   });
 
-  // === NOVÝ POSLUCHAČ PRO ZMĚNU MÓDU (DÍTĚ/DOSPĚLÝ) ===
+  // === ZMĚNA MÓDU (JUNIOR/DOSPĚLÝ) - POVOLENO I V ROLE_SELECTION ===
   socket.on('update_settings', ({ code, mode }) => {
     const game = games.get(code);
-    if (game) {
-      game.settings.mode = mode; // Uložíme 'kid' nebo 'adult'
-      // Řekneme všem v lobby, že se změnilo nastavení (aby se jim vizuálně změnilo tlačítko/ikona)
-      io.to(code).emit('settings_changed', game.settings);
-      console.log(`Game ${code} mode switched to: ${mode}`);
+    if (!game) return;
+    
+    // ✅ Povolit změnu pouze ve fázích waiting a role_selection
+    if (game.phase !== 'lobby' && game.phase !== 'waiting' && game.phase !== 'role_selection') {
+      console.log(`⚠️ Settings change rejected - game in phase: ${game.phase}`);
+      return;
     }
+    
+    game.settings.mode = mode; // Uložíme 'kid' nebo 'adult'
+    // Při změně módu resetuj kategorii (jiné kategorie pro adult/junior)
+    game.settings.category = null;
+    // Řekneme všem v lobby, že se změnilo nastavení
+    io.to(code).emit('settings_changed', game.settings);
+    console.log(`Game ${code} mode switched to: ${mode}, category reset to null`);
   });
 
-  // === NOVÝ POSLUCHAČ PRO VÝBĚR TÉMATU ===
-  socket.on('select_topic', ({ code, topic, isPremium, gameCode }) => {
+  // === 📚 ZMĚNA KATEGORIE OTÁZEK ===
+  socket.on('update_category', ({ code, category }) => {
+    console.log(`\n📚 ========== UPDATE CATEGORY ==========`);
+    console.log(`   Code: ${code}`);
+    console.log(`   Category: ${category}`);
+    
     const game = games.get(code);
-    if (!game) return;
-
-    game.settings.topic = topic;
-    game.settings.isPremium = isPremium || false;
-    game.settings.gameCode = gameCode || null;
-
-    // Pokud je to premium s kódem, logujeme pro tracking
-    if (isPremium && gameCode) {
-      console.log(`✨ Premium session started: ${code} | Code: ${gameCode} | Topic: "${topic}"`);
-    } else {
-      console.log(`🎲 Free session started: ${code} | Topic: general`);
+    if (!game) {
+      console.log(`❌ Game not found: ${code}`);
+      return;
     }
-
-    // Oznámíme všem hráčům změnu nastavení
+    
+    console.log(`   Game phase: ${game.phase}`);
+    
+    // ✅ Povolit změnu pouze ve fázích lobby, waiting a role_selection
+    if (game.phase !== 'lobby' && game.phase !== 'waiting' && game.phase !== 'role_selection') {
+      console.log(`⚠️ Category change rejected - game in phase: ${game.phase}`);
+      return;
+    }
+    
+    // Ověř že kategorie existuje pro daný mód
+    const categories = game.settings.mode === 'kid' ? JUNIOR_CATEGORIES : ADULT_CATEGORIES;
+    if (category !== null && !categories[category]) {
+      console.log(`⚠️ Invalid category: ${category} for mode: ${game.settings.mode}`);
+      return;
+    }
+    
+    game.settings.category = category; // null = mix všech, nebo konkrétní klíč
     io.to(code).emit('settings_changed', game.settings);
     
-    // Přejdeme na další fázi (role selection)
-    game.phase = 'role_selection';
-    io.to(code).emit('phase_change', { phase: 'role_selection' });
+    const categoryName = category ? categories[category].name : 'Mix všech';
+    console.log(`✅ Category updated: ${categoryName}`);
+    console.log(`📚 ========================================\n`);
   });
 
   socket.on('join_game', (code) => {
@@ -318,12 +354,13 @@ io.on('connection', (socket) => {
     game.players.push({ id: socket.id, role: null, position: 0, answer: null, ready: false });
     socket.join(code);
     
-    // Po připojení nového hráče mu pošleme aktuální nastavení (aby viděl správný mód)
+    // Po připojení nového hráče mu pošleme aktuální nastavení
     socket.emit('settings_changed', game.settings);
 
+    // ✅ ZMĚNA: Po připojení druhého hráče ROVNOU na role_selection (bez topic_selection)
     if (game.players.length === 2) {
-      game.phase = 'topic_selection'; // ✅ ZMĚNA: Nejdřív výběr tématu
-      io.to(code).emit('phase_change', { phase: 'topic_selection' });
+      game.phase = 'role_selection';
+      io.to(code).emit('phase_change', { phase: 'role_selection' });
     }
 
     socket.emit('game_joined', { code });
@@ -421,7 +458,7 @@ io.on('connection', (socket) => {
         };
       });
 
-      // 2. Až PO 3,5 SEKUNDÁCH pošleme výsledky (barvičky)
+      // 2. Až PO 3 SEKUNDÁCH pošleme výsledky
       setTimeout(() => {
         io.to(code).emit('round_results', {
           results,
@@ -452,11 +489,11 @@ io.on('connection', (socket) => {
           game.phase = 'waiting_for_ready';
           io.to(code).emit('waiting_for_ready');
         }
-      }, 3000); // 3 sekundy čekáme (délka znělky)
+      }, 3000);
     }
   });
 
-  // TADY JE VELKÁ ZMĚNA - POUŽITÍ AI GENERÁTORU
+  // POUŽITÍ AI GENERÁTORU - VŽDY 'general' TÉMA
   socket.on('playerReady', async ({ code }) => {
     const game = games.get(code);
     if (!game || game.phase !== 'waiting_for_ready') return;
@@ -474,10 +511,9 @@ io.on('connection', (socket) => {
     if (game.players.every(p => p.ready)) {
       game.phase = 'playing';
       
-      // === VOLÁNÍ AI MOZKU S AKTUÁLNÍM NASTAVENÍM ===
-      // Zde posíláme téma i mód (kid/adult) do generátoru
+      // === VOLÁNÍ AI MOZKU - S PODPOROU KATEGORIE ===
       try {
-        const newQuestion = await generateQuestion(game.settings.topic, game.settings.mode);
+        const newQuestion = await generateQuestion(game.settings.mode, game.settings.category);
         game.currentQuestion = newQuestion;
         
         game.players.forEach(p => p.ready = false);
@@ -508,23 +544,35 @@ io.on('connection', (socket) => {
 
   // === 🎬 SPECTATOR MODE ===
   socket.on('join_as_spectator', ({ gameCode, premiumCode }) => {
-    console.log(`🎬 Spectator request for game: ${gameCode}`);
+    console.log(`\n🎬 ========== SPECTATOR REQUEST ==========`);
+    console.log(`   Game code: ${gameCode}`);
+    console.log(`   Premium code: ${premiumCode}`);
+    console.log(`   Socket ID: ${socket.id}`);
+    console.log(`   Active games: [${Array.from(games.keys()).join(', ') || 'none'}]`);
     
     // 1. Ověř premium kód
-    const isAdmin = premiumCode === 'STVANECADMIN';
+    const isAdmin = premiumCode === 'STVANICEADMIN';
+    console.log(`   Is admin: ${isAdmin}`);
+    
     const premiumResult = !isAdmin ? validateCode(premiumCode) : { valid: true };
+    console.log(`   Premium valid: ${premiumResult.valid}`);
     
     if (!isAdmin && !premiumResult.valid) {
-      socket.emit('spectator_error', { message: 'Neplatný premium kód' });
+      console.log(`❌ Invalid premium code`);
+      socket.emit('spectator_error', { message: 'Neplatný kód pro diváckou místnost' });
       return;
     }
     
     // 2. Ověř že hra existuje
     const game = games.get(gameCode);
     if (!game) {
-      socket.emit('spectator_error', { message: 'Hra neexistuje' });
+      console.log(`❌ Game NOT FOUND: ${gameCode}`);
+      console.log(`   Available games: ${Array.from(games.keys()).join(', ') || 'NONE'}`);
+      socket.emit('spectator_error', { message: 'Hra s tímto kódem neexistuje nebo již skončila' });
       return;
     }
+    
+    console.log(`✅ Game FOUND! Phase: ${game.phase}, Players: ${game.players.length}`);
     
     // 3. Připoj do room jako spectator
     socket.join(gameCode);
@@ -535,7 +583,8 @@ io.on('connection', (socket) => {
     if (!game.spectators) game.spectators = [];
     game.spectators.push(socket.id);
     
-    console.log(`🎬 Spectator joined game ${gameCode}. Total spectators: ${game.spectators.length}`);
+    console.log(`✅ Spectator joined! Total spectators: ${game.spectators.length}`);
+    console.log(`🎬 ==========================================\n`);
     
     // 4. Pošli aktuální stav hry
     socket.emit('spectator_joined', {
@@ -602,7 +651,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 ╔════════════════════════════════════════╗
 ║   ŠTVANICE Server Running              ║
 ║   Mode: AI ENABLED 🧠                  ║
-║   Payment: METADATA STORAGE 🎫         ║
+║   Spectator: 139 Kč/month 🎬           ║
 ╚════════════════════════════════════════╝
   `);
   console.log(`Visit: http://localhost:${PORT}`);
