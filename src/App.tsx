@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSocket } from './contexts/SocketContext';
 import { useGameAudio } from './hooks/useGameAudio';
 import Lobby from './components/Lobby';
@@ -14,16 +14,7 @@ import Success from './components/SuccessPage';
 import { AlertCircle } from 'lucide-react';
 
 /**
- * 🎮 FLOW v3.1:
- * 
- * HOSTITEL:
- * lobby → category_selection → waiting_for_player (LLM začíná) → role_selection → countdown (35s) → headstart → playing
- * 
- * HRÁČ 2:
- * lobby → [zadá kód] → role_selection → countdown (35s) → headstart → playing
- * 
- * ODVETA:
- * game_over → play_again → role_selection → headstart → playing (BEZ countdownu)
+ * 🎮 FLOW v3.2: OPRAVA WHITE SCREEN
  */
 
 type GamePhase = 
@@ -57,39 +48,30 @@ interface AIProgress {
 }
 
 function App() {
-  // ✅ SUCCESS PAGE ROUTING
   const isSuccessPage = window.location.pathname.startsWith('/success');
-  if (isSuccessPage) {
-    return <Success />;
-  }
+  if (isSuccessPage) return <Success />;
 
-  // ❓ FAQ ROUTING
   const isFAQMode = window.location.pathname.startsWith('/faq') || window.location.pathname.startsWith('/jak-hrat');
-  if (isFAQMode) {
-    return <FAQ />;
-  }
+  if (isFAQMode) return <FAQ />;
 
-  // 🎬 SPECTATOR MODE ROUTING
   const isSpectatorMode = window.location.pathname.startsWith('/divaci');
-  if (isSpectatorMode) {
-    return <SpectatorView />;
-  }
+  if (isSpectatorMode) return <SpectatorView />;
 
   const { socket, connected } = useSocket();
   const { playAmbient, stopAmbient, playSfx } = useGameAudio();
   
-  const [phase, setPhase] = useState<GamePhase>('lobby');
+  const playSfxRef = useRef(playSfx);
+  useEffect(() => {
+    playSfxRef.current = playSfx;
+  }, [playSfx]);
   
-  // Nastavení hry
+  const [phase, setPhase] = useState<GamePhase>('lobby');
   const [ageGroup, setAgeGroup] = useState<string>('adult');
   const [gameMode, setGameMode] = useState<'adult' | 'kid'>('adult');
-  
-  // Countdown
   const [countdown, setCountdown] = useState<number>(35);
   const [aiProgress, setAiProgress] = useState<AIProgress>({ generated: 0, target: 8 });
   const [isRematch, setIsRematch] = useState<boolean>(false);
   
-  // Hra
   const [roomCode, setRoomCode] = useState<string>('');
   const [myRole, setMyRole] = useState<'hunter' | 'prey' | null>(null);
   const [rolesLocked, setRolesLocked] = useState(false);
@@ -112,7 +94,6 @@ function App() {
       phase === 'role_selection' || 
       phase === 'headstart_selection';
 
-    // Countdown má vlastní audio
     if (phase === 'countdown') {
       stopAmbient();
       return;
@@ -122,10 +103,6 @@ function App() {
       playAmbient();
     } else {
       stopAmbient();
-    }
-
-    if (phase === 'playing' && !gameOver) {
-      playSfx('gamestart.mp3');
     }
 
     const handleUserInteraction = () => {
@@ -140,13 +117,56 @@ function App() {
     };
   }, [phase, gameOver, playAmbient, stopAmbient, playSfx]);
 
+  // UKLÁDÁNÍ SESSION
+  useEffect(() => {
+    if (socket && socket.id) {
+      sessionStorage.setItem('last_socket_id', socket.id);
+    }
+    if (roomCode) {
+      sessionStorage.setItem('last_room_code', roomCode);
+    }
+  }, [socket?.id, roomCode]);
+
   // === SOCKET EVENTS ===
   useEffect(() => {
     if (!socket) return;
+
+    const handleConnect = () => {
+      console.log('🔌 Socket připojen, kontroluji session...');
+      const lastSocketId = sessionStorage.getItem('last_socket_id');
+      const lastRoomCode = sessionStorage.getItem('last_room_code');
+      
+      if (lastRoomCode && lastSocketId && socket.id !== lastSocketId) {
+        console.log(`🔄 Zjištěna přerušená relace, žádám o rejoin do ${lastRoomCode}`);
+        setIsResyncing(true);
+        socket.emit('rejoin_game', { 
+          roomCode: lastRoomCode, 
+          oldSocketId: lastSocketId 
+        });
+      }
+    };
+
+    socket.on('connect', handleConnect);
     
-    // Hra vytvořena - jde do waiting_for_player
+    if (socket.connected) {
+      handleConnect();
+    }
+
+    socket.on('rejoin_failed', ({ message }) => {
+      console.log('❌ Rejoin failed:', message);
+      setIsResyncing(false);
+      sessionStorage.removeItem('last_socket_id');
+      sessionStorage.removeItem('last_room_code');
+      setPhase('lobby');
+      setRoomCode('');
+      setError(message);
+    });
+
+    socket.on('player_connection_restored', ({ playerId }) => {
+      console.log('✅ Hráč se vrátil:', playerId);
+    });
+    
     socket.on('game_created', ({ code, ageGroup: group, phase: initialPhase }) => {
-      console.log('🎮 Game created:', code, group);
       setRoomCode(code);
       setAgeGroup(group);
       setGameMode(group === 'adult' ? 'adult' : 'kid');
@@ -155,9 +175,7 @@ function App() {
       setPhase(initialPhase || 'waiting_for_player');
     });
 
-    // Hráč 2 se připojil
     socket.on('game_joined', ({ code, ageGroup: group, phase: currentPhase }) => {
-      console.log('🎮 Joined game:', code, group, currentPhase);
       setRoomCode(code);
       if (group) {
         setAgeGroup(group);
@@ -168,37 +186,24 @@ function App() {
       }
     });
 
-    // Hráč přibyl
     socket.on('player_joined', ({ playersCount: count }) => {
       setPlayersCount(count);
     });
 
-    // Countdown začal (po výběru role)
     socket.on('countdown_started', ({ countdown: initialCountdown, ageGroup: group }) => {
-      console.log('⏱️ Countdown started:', initialCountdown);
       setCountdown(initialCountdown);
       setPhase('countdown');
     });
     
-    // Countdown tick
     socket.on('countdown_tick', ({ remaining, aiProgress: progress, playersCount: count }) => {
       setCountdown(remaining);
-      if (progress) {
-        setAiProgress(progress);
-      }
-      if (count !== undefined) {
-        setPlayersCount(count);
-      }
+      if (progress) setAiProgress(progress);
+      if (count !== undefined) setPlayersCount(count);
     });
 
-    // Countdown skončil
-    socket.on('countdown_complete', ({ aiReady, questionCount }) => {
-      console.log('⏰ Countdown complete, AI ready:', aiReady, 'questions:', questionCount);
-    });
+    socket.on('countdown_complete', () => {});
 
-    // Odveta začala
     socket.on('rematch_started', ({ isRematch: rematch }) => {
-      console.log('🔄 Rematch started');
       setIsRematch(rematch);
       setMyRole(null);
       setRolesLocked(false);
@@ -216,7 +221,6 @@ function App() {
     });
 
     socket.on('phase_change', ({ phase: newPhase }) => {
-      console.log('📍 Phase change:', newPhase);
       setPhase(newPhase);
       if (newPhase === 'role_selection' || newPhase === 'headstart_selection') {
         setGameOver(false); 
@@ -233,12 +237,13 @@ function App() {
       setRolesLocked(allRolesAssigned);
     });
 
-    socket.on('game_start', ({ headstart, positions, question }) => {
+    socket.on('game_start', ({ positions, question }) => {
       setPlayers(positions); 
       setCurrentQuestion(question); 
       setPhase('playing'); 
       setRoundResult(null); 
       setGameOver(false);
+      playSfxRef.current('gamestart.mp3');
     });
 
     socket.on('round_results', ({ results, correctAnswer }) => {
@@ -263,11 +268,13 @@ function App() {
     });
 
     socket.on('player_disconnected', () => { 
-      setDisconnected(true); 
+      setDisconnected(true);
+      sessionStorage.removeItem('last_socket_id');
+      sessionStorage.removeItem('last_room_code');
     });
 
     socket.on('player_connection_unstable', ({ gracePeriod }) => {
-      console.log(`⚠️ Soupeř má nestabilní připojení (grace period: ${gracePeriod/1000}s)`);
+      console.log(`⚠️ Soupeř má nestabilní připojení`);
     });
 
     socket.on('game_state_sync', (state) => {
@@ -275,24 +282,39 @@ function App() {
       setIsResyncing(false);
       
       if (state.phase) setPhase(state.phase);
+      if (state.roomCode) setRoomCode(state.roomCode);
       if (state.players) {
         setPlayers(state.players);
-        setPlayersCount(state.players.length);
-        const me = state.players.find((p: any) => p.id === socket.id);
-        if (me && me.role) setMyRole(me.role);
+        setPlayersCount(state.playersCount || state.players.length);
       }
+      
+      if (state.myRole !== undefined) {
+        setMyRole(state.myRole);
+      } else if (state.players) {
+        const me = state.players.find((p: any) => p.id === socket.id);
+        if (me) setMyRole(me.role);
+      }
+      
+      if (state.rolesLocked !== undefined) setRolesLocked(state.rolesLocked);
       if (state.currentQuestion) setCurrentQuestion(state.currentQuestion);
       if (state.countdown !== undefined) setCountdown(state.countdown);
-      if (state.settings) {
-        if (state.settings.ageGroup) {
-          setAgeGroup(state.settings.ageGroup);
-          setGameMode(state.settings.ageGroup === 'adult' ? 'adult' : 'kid');
-        }
-      }
       if (state.aiProgress) setAiProgress(state.aiProgress);
+      
+      if (state.ageGroup) {
+        setAgeGroup(state.ageGroup);
+        setGameMode(state.ageGroup === 'adult' ? 'adult' : 'kid');
+      } else if (state.settings?.ageGroup) {
+        setAgeGroup(state.settings.ageGroup);
+        setGameMode(state.settings.ageGroup === 'adult' ? 'adult' : 'kid');
+      }
+      
+      if (state.isRematch !== undefined) setIsRematch(state.isRematch);
+      if (state.winner !== undefined) setWinner(state.winner);
+      if (state.gameOver !== undefined) setGameOver(state.gameOver);
     });
 
     return () => {
+      socket.off('connect');
       socket.off('game_created');
       socket.off('game_joined');
       socket.off('player_joined');
@@ -312,10 +334,12 @@ function App() {
       socket.off('start_resolution');
       socket.off('player_connection_unstable');
       socket.off('game_state_sync');
+      socket.off('rejoin_failed');
+      socket.off('player_connection_restored');
     };
   }, [socket]);
 
-  // Visibility change handler
+  // VISIBILITY CHANGE - OPRAVENO PROTI WHITE SCREEN
   useEffect(() => {
     if (!socket || !roomCode) return;
     
@@ -323,15 +347,43 @@ function App() {
       if (document.visibilityState === 'hidden') {
         socket.emit('player_paused', { code: roomCode });
       } else {
-        console.log('👁️ Uživatel se vrátil, žádám resync...');
-        setIsResyncing(true);
-        socket.emit('player_resumed', { code: roomCode });
-        setTimeout(() => setIsResyncing(false), 2000);
+        console.log('👁️ Uživatel se vrátil...');
+        
+        // 🆕 OPRAVA: Kontrola, zda máme stejné ID
+        const lastSocketId = sessionStorage.getItem('last_socket_id');
+        
+        if (socket.id === lastSocketId) {
+            // Jsme to my, spojení nepadlo
+            console.log('✅ ID sedí, žádám rychlý resync...');
+            socket.emit('player_resumed', { code: roomCode });
+        } else {
+            // ID je jiné, čekáme na REJOIN z handleConnect
+            // NEPOSÍLÁME player_resumed, aby server nevrátil null roli
+            console.log('🛑 ID se liší, blokuji player_resumed a čekám na rejoin...');
+            setIsResyncing(true);
+        }
       }
     };
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [socket, roomCode]);
+
+  // 🆕 DETEKCE RELOADU/ZAVŘENÍ - úmyslný odchod
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Informovat server o úmyslném odchodu
+      if (socket && roomCode) {
+        console.log('👋 Reload/zavření detekováno, odesílám player_leaving...');
+        socket.emit('player_leaving', { code: roomCode });
+      }
+      // Vyčistit session - při reloadu nechceme rejoin
+      sessionStorage.removeItem('last_socket_id');
+      sessionStorage.removeItem('last_room_code');
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [socket, roomCode]);
 
   // === HANDLERS ===
@@ -354,9 +406,7 @@ function App() {
     socket?.emit('join_game', code);
   };
 
-  const handleCountdownEnd = () => {
-    console.log('⏰ Countdown end (client-side)');
-  };
+  const handleCountdownEnd = () => {};
 
   const handleSelectRole = (role: 'hunter' | 'prey') => {
     socket?.emit('select_role', { code: roomCode, role });
@@ -374,7 +424,7 @@ function App() {
     socket?.emit('play_again', { code: roomCode });
   };
 
-  // === LOADING STATE ===
+  // === LOADING STATES ===
   if (!connected) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -386,7 +436,6 @@ function App() {
     );
   }
 
-  // === RESYNCING STATE ===
   if (isResyncing) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -398,7 +447,6 @@ function App() {
     );
   }
 
-  // === DISCONNECTED STATE ===
   if (disconnected) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -408,7 +456,7 @@ function App() {
           <p className="text-slate-400">Hra byla ukončena</p>
           <button 
             onClick={() => window.location.reload()} 
-            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl shadow-lg shadow-cyan-500/50 transition-all transform hover:scale-105"
+            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl shadow-lg shadow-cyan-500/50"
           >
             ZPĚT DO LOBBY
           </button>
@@ -420,7 +468,6 @@ function App() {
   // === RENDER ===
   return (
     <>
-      {/* Error toast */}
       {error && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-slide-down">
           <div className="bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2">
@@ -430,12 +477,10 @@ function App() {
         </div>
       )}
       
-      {/* LOBBY */}
       {phase === 'lobby' && (
         <Lobby onCreateGame={handleCreateGame} onJoinGame={handleJoinGame} />
       )}
       
-      {/* VÝBĚR KATEGORIE */}
       {phase === 'category_selection' && (
         <CategorySelection 
           onSelectAndCreate={handleSelectCategoryAndCreate}
@@ -443,12 +488,10 @@ function App() {
         />
       )}
       
-      {/* ČEKÁNÍ NA HRÁČE 2 */}
       {phase === 'waiting_for_player' && (
         <WaitingRoom roomCode={roomCode} socket={socket} />
       )}
       
-      {/* VÝBĚR ROLE */}
       {phase === 'role_selection' && (
         <RoleSelection 
           onSelectRole={handleSelectRole} 
@@ -459,7 +502,6 @@ function App() {
         />
       )}
 
-      {/* COUNTDOWN (po výběru role) */}
       {phase === 'countdown' && (
         <CountdownWaiting
           roomCode={roomCode}
@@ -471,7 +513,6 @@ function App() {
         />
       )}
       
-      {/* HEADSTART SELECTION */}
       {phase === 'headstart_selection' && (
         <HeadstartSelection 
           isPreyPlayer={myRole === 'prey'} 
@@ -479,20 +520,29 @@ function App() {
         />
       )}
       
-      {/* GAME BOARD */}
-      {(phase === 'playing' || phase === 'finished') && myRole && (
-        <GameBoard 
-          myRole={myRole} 
-          players={players} 
-          currentQuestion={currentQuestion} 
-          onSubmitAnswer={handleSubmitAnswer} 
-          gameOver={gameOver} 
-          winner={winner} 
-          roundResult={roundResult} 
-          roomCode={roomCode} 
-          onRestart={handlePlayAgain} 
-          gameMode={gameMode}
-        />
+      {/* GAME BOARD - S POJISTKOU PROTI BÍLÉ OBRAZOVCE */}
+      {(phase === 'playing' || phase === 'finished') && (
+        myRole ? (
+          <GameBoard 
+            myRole={myRole} 
+            players={players} 
+            currentQuestion={currentQuestion} 
+            onSubmitAnswer={handleSubmitAnswer} 
+            gameOver={gameOver} 
+            winner={winner} 
+            roundResult={roundResult} 
+            roomCode={roomCode} 
+            onRestart={handlePlayAgain} 
+            gameMode={gameMode}
+          />
+        ) : (
+          <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+            <div className="text-center space-y-4">
+              <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p className="text-white text-xl">Načítám herní data...</p>
+            </div>
+          </div>
+        )
       )}
     </>
   );

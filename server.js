@@ -1,14 +1,6 @@
 /**
  * 🎮 ŠTVANICE SERVER
- * 
- * VERZE: 3.1 - OPRAVENÝ COUNTDOWN FLOW
- * 
- * Flow:
- * 1. Hostitel vybere kategorii → create_game_with_category → LLM generování ZAČÍNÁ
- * 2. Čekání na hráče 2 (LLM generuje na pozadí)
- * 3. Výběr role → COUNTDOWN 35s ZAČÍNÁ (po prvním výběru role)
- * 4. Po countdownu → headstart_selection → hra
- * 5. Odveta → BEZ countdownu
+ * * VERZE: 3.2 - OPRAVA WHITE SCREEN (RACE CONDITION)
  */
 
 import express from 'express';
@@ -66,15 +58,14 @@ const PORT = process.env.PORT || 3000;
 
 const games = new Map();
 
-// Grace period pro odpojené hráče
-const DISCONNECT_GRACE_PERIOD = 15000;
+// Grace period pro odpojené hráče (45 sekund)
+const DISCONNECT_GRACE_PERIOD = 45000;
 const disconnectedPlayers = new Map();
 
 // Countdown konfigurace
-const COUNTDOWN_DURATION = 35; // sekund (změněno z 45)
-const WAITING_TIMEOUT = 180; // sekund - čekání na hráče 2
-const AI_TARGET_QUESTIONS = 8; // Cílový počet AI otázek (změněno z 12)
-const AI_MIN_READY = 4; // Minimum pro "ready" stav
+const COUNTDOWN_DURATION = 35; 
+const AI_TARGET_QUESTIONS = 8; 
+const AI_MIN_READY = 4; 
 
 // Aktivní countdown intervaly
 const countdownIntervals = new Map();
@@ -224,25 +215,17 @@ function generateRoomCode() {
   return code;
 }
 
-/**
- * 🆕 Spustí countdown pro hru (volá se po výběru role!)
- */
 function startCountdown(roomCode) {
   const game = games.get(roomCode);
   if (!game) return;
 
-  // Už běží?
   if (countdownIntervals.has(roomCode)) {
-    console.log(`⚠️ Countdown already running for ${roomCode}`);
     return;
   }
 
   game.countdown = COUNTDOWN_DURATION;
   game.phase = 'countdown';
   
-  console.log(`⏱️ Countdown started for game ${roomCode} (${COUNTDOWN_DURATION}s)`);
-
-  // Informovat všechny o změně fáze
   io.to(roomCode).emit('phase_change', { phase: 'countdown' });
   io.to(roomCode).emit('countdown_started', { 
     countdown: COUNTDOWN_DURATION,
@@ -259,7 +242,6 @@ function startCountdown(roomCode) {
 
     currentGame.countdown--;
 
-    // Získat AI progress
     const aiStatus = getPreWarmStatus(roomCode);
     currentGame.aiProgress = {
       generated: aiStatus?.generated || 0,
@@ -267,22 +249,16 @@ function startCountdown(roomCode) {
       ready: (aiStatus?.generated || 0) >= AI_MIN_READY
     };
 
-    // Broadcast tick všem v místnosti
     io.to(roomCode).emit('countdown_tick', {
       remaining: currentGame.countdown,
       aiProgress: currentGame.aiProgress,
       playersCount: currentGame.players.length
     });
 
-    // Countdown skončil
     if (currentGame.countdown <= 0) {
       clearInterval(interval);
       countdownIntervals.delete(roomCode);
       
-      console.log(`⏰ Countdown ended for game ${roomCode}`);
-      console.log(`   AI status: ${currentGame.aiProgress.generated}/${AI_TARGET_QUESTIONS} (ready: ${currentGame.aiProgress.ready})`);
-
-      // Přejít na headstart_selection
       currentGame.phase = 'headstart_selection';
       
       io.to(roomCode).emit('countdown_complete', {
@@ -297,14 +273,10 @@ function startCountdown(roomCode) {
   countdownIntervals.set(roomCode, interval);
 }
 
-/**
- * Zastaví countdown
- */
 function stopCountdown(roomCode) {
   if (countdownIntervals.has(roomCode)) {
     clearInterval(countdownIntervals.get(roomCode));
     countdownIntervals.delete(roomCode);
-    console.log(`⏹️ Countdown stopped for ${roomCode}`);
   }
 }
 
@@ -312,13 +284,12 @@ function resetGame(roomCode) {
   const game = games.get(roomCode);
   if (!game) return;
 
-  // 🆕 ODVETA: Ihned do role_selection BEZ countdownu
   game.phase = 'role_selection';
   game.headstart = null;
   game.currentQuestion = null;
   game.rematchRequested = {};
   game.countdown = 0;
-  game.isRematch = true; // Označení že jde o odvetu
+  game.isRematch = true;
 
   game.players.forEach(player => {
     player.role = null;
@@ -327,11 +298,8 @@ function resetGame(roomCode) {
     player.ready = false;
   });
 
-  // Reset game session v generátoru (vyčistí použité odpovědi)
   resetGameSession(roomCode);
 
-  // 🆕 Spustit nové pre-warming pro odvetu
-  console.log(`🔄 Rematch: Starting new pre-warm for ${roomCode}`);
   preWarmCache(roomCode, game.settings.ageGroup).catch(err => {
     console.error(`❌ Rematch pre-warm failed: ${err.message}`);
   });
@@ -356,8 +324,6 @@ app.use((req, res) => {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // 🆕 VYTVOŘENÍ HRY S KATEGORIÍ
-  // LLM generování začíná IHNED, ale countdown až po výběru role
   socket.on('create_game_with_category', ({ ageGroup }) => {
     if (!AGE_GROUP_CONFIG[ageGroup]) {
       socket.emit('error', { message: 'Neplatná věková skupina' });
@@ -370,11 +336,11 @@ io.on('connection', (socket) => {
       code: roomCode,
       players: [{ id: socket.id, role: null, position: 0, answer: null, ready: false }],
       spectators: [],
-      phase: 'waiting_for_player', // Čekání na hráče 2
+      phase: 'waiting_for_player',
       settings: {
         ageGroup: ageGroup
       },
-      countdown: 0, // Countdown ještě nezačal
+      countdown: 0,
       aiProgress: { generated: 0, target: AI_TARGET_QUESTIONS, ready: false },
       headstart: null,
       currentQuestion: null,
@@ -385,23 +351,17 @@ io.on('connection', (socket) => {
     games.set(roomCode, gameState);
     socket.join(roomCode);
     
-    // Odpověď klientovi - jde do waiting_for_player, ne do countdown
     socket.emit('game_created', { 
       code: roomCode,
       ageGroup: ageGroup,
       phase: 'waiting_for_player'
     });
     
-    console.log(`🎮 Game created: ${roomCode} (${AGE_GROUP_CONFIG[ageGroup].name})`);
-
-    // 🚀 SPUSTIT PRE-WARMING AI IHNED
-    console.log(`🧠 Starting AI pre-warm for ${roomCode}...`);
     preWarmCache(roomCode, ageGroup).catch(err => {
       console.error(`❌ Pre-warm failed for ${roomCode}:`, err.message);
     });
   });
 
-  // PŘIPOJENÍ DO HRY (hráč 2)
   socket.on('join_game', (code) => {
     const game = games.get(code);
 
@@ -418,12 +378,8 @@ io.on('connection', (socket) => {
     game.players.push({ id: socket.id, role: null, position: 0, answer: null, ready: false });
     socket.join(code);
     
-    console.log(`👤 Player 2 joined game: ${code}`);
-
-    // Oba hráči jsou zde → přejít na role_selection
     if (game.players.length >= 2 && game.phase === 'waiting_for_player') {
       game.phase = 'role_selection';
-      
       io.to(code).emit('phase_change', { phase: 'role_selection' });
       io.to(code).emit('player_joined', { playersCount: game.players.length });
     }
@@ -437,7 +393,6 @@ io.on('connection', (socket) => {
     socket.emit('settings_changed', game.settings);
   });
 
-  // VÝBĚR ROLE
   socket.on('select_role', ({ code, role }) => {
     const game = games.get(code);
     if (!game || game.phase !== 'role_selection') return;
@@ -452,31 +407,23 @@ io.on('connection', (socket) => {
     }
 
     player.role = role;
-    console.log(`🎭 Player ${socket.id} selected role: ${role}`);
 
-    // Přidělit druhou roli automaticky
     const otherPlayer = game.players.find(p => p.id !== socket.id && !p.role);
     if (otherPlayer) {
       otherPlayer.role = role === 'hunter' ? 'prey' : 'hunter';
-      console.log(`🎭 Auto-assigned role to other player: ${otherPlayer.role}`);
     }
 
     io.to(code).emit('roles_updated', {
       players: game.players.map(p => ({ id: p.id, role: p.role }))
     });
 
-    // Oba mají role
     if (game.players.every(p => p.role)) {
-      // 🆕 ODVETA: Bez countdownu, rovnou headstart
       if (game.isRematch) {
-        console.log(`⚡ Rematch: Skipping countdown, going to headstart`);
         game.phase = 'headstart_selection';
         setTimeout(() => {
           io.to(code).emit('phase_change', { phase: 'headstart_selection' });
         }, 500);
       } else {
-        // 🆕 PRVNÍ HRA: Spustit countdown
-        console.log(`⏱️ First game: Starting countdown`);
         setTimeout(() => {
           startCountdown(code);
         }, 500);
@@ -484,7 +431,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // VÝBĚR NÁSKOKU
   socket.on('select_headstart', ({ code, headstart }) => {
     const game = games.get(code);
     if (!game || game.phase !== 'headstart_selection') return;
@@ -509,7 +455,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // ODPOVĚĎ NA OTÁZKU
   socket.on('submit_answer', ({ code, answerIndex }) => {
     const game = games.get(code);
     if (!game || game.phase !== 'playing') return;
@@ -578,7 +523,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // HRÁČ PŘIPRAVEN - generování otázky
   socket.on('playerReady', async ({ code }) => {
     const game = games.get(code);
     if (!game || game.phase !== 'waiting_for_ready') return;
@@ -632,7 +576,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // HRÁT ZNOVU (odveta)
   socket.on('play_again', ({ code }) => {
     resetGame(code);
   });
@@ -640,8 +583,6 @@ io.on('connection', (socket) => {
   // === SPECTATOR MODE ===
   
   socket.on('join_as_spectator', ({ gameCode, premiumCode }) => {
-    console.log(`🎬 Spectator request: ${gameCode}`);
-    
     const isAdmin = premiumCode === 'STVANICEADMIN';
     const premiumResult = !isAdmin ? validateCode(premiumCode) : { valid: true };
     
@@ -709,24 +650,123 @@ io.on('connection', (socket) => {
   socket.on('player_resumed', ({ code }) => {
     const game = games.get(code);
     if (game) {
-      console.log(`👁️ Hráč ${socket.id} se vrátil, posílám resync`);
+      // Najít hráče podle aktuálního ID
+      const player = game.players.find(p => p.id === socket.id);
+      
+      // 🆕 OPRAVA: Pokud server hráče s tímto ID nezná (protože rejoin ještě nedoběhl),
+      // ignorujeme požadavek. Pokud bychom pokračovali, vrátili bychom null roli.
+      if (!player) {
+        console.log(`⚠️ Ignoruji player_resumed od neznámého ID ${socket.id} (čekám na rejoin)`);
+        return;
+      }
+
+      const myRole = player.role;
+      
+      console.log(`👁️ Hráč ${socket.id} se vrátil (role: ${myRole}), posílám kompletní resync`);
+      
       socket.emit('game_state_sync', {
         phase: game.phase,
+        roomCode: code,
         players: game.players,
+        playersCount: game.players.length,
+        myRole: myRole,
+        rolesLocked: game.players.every(p => p.role !== null),
         currentQuestion: game.currentQuestion,
         headstart: game.headstart,
         settings: game.settings,
-        countdown: game.countdown,
-        aiProgress: game.aiProgress
+        ageGroup: game.settings?.ageGroup || 'adult',
+        countdown: game.countdown || 0,
+        aiProgress: game.aiProgress || { generated: 0, target: 8 },
+        isRematch: game.isRematch || false,
+        winner: game.winner || null,
+        gameOver: game.phase === 'finished'
       });
+    } else {
+      socket.emit('error', { message: 'Hra již neexistuje' });
     }
+  });
+
+  // 🆕 REJOIN MECHANISMUS
+  socket.on('rejoin_game', ({ roomCode, oldSocketId }) => {
+    console.log(`♻️ Pokus o rejoin: Nový Socket ${socket.id} se hlásí jako Starý ${oldSocketId} do hry ${roomCode}`);
+    
+    const game = games.get(roomCode);
+    if (!game) {
+      socket.emit('rejoin_failed', { message: 'Hra již neexistuje nebo vypršel časový limit.' });
+      return;
+    }
+    
+    const disconnectInfo = disconnectedPlayers.get(oldSocketId);
+    const playerIndex = game.players.findIndex(p => p.id === oldSocketId);
+    
+    if (playerIndex !== -1) {
+      if (disconnectInfo) {
+        console.log(`✅ Zrušen timeout pro hráče ${oldSocketId}`);
+        clearTimeout(disconnectInfo.timeout);
+        disconnectedPlayers.delete(oldSocketId);
+      }
+      
+      game.players[playerIndex].id = socket.id;
+      
+      socket.join(roomCode);
+      console.log(`✅ Úspěšný rejoin! Hráč ${oldSocketId} je nyní ${socket.id}`);
+      
+      const me = game.players[playerIndex];
+      
+      socket.emit('game_state_sync', {
+        phase: game.phase,
+        roomCode: roomCode,
+        players: game.players,
+        playersCount: game.players.length,
+        myRole: me.role,
+        rolesLocked: game.players.every(p => p.role !== null),
+        currentQuestion: game.currentQuestion,
+        headstart: game.headstart,
+        settings: game.settings,
+        ageGroup: game.settings?.ageGroup || 'adult',
+        countdown: game.countdown || 0,
+        aiProgress: game.aiProgress || { generated: 0, target: 8 },
+        isRematch: game.isRematch || false,
+        winner: game.winner || null,
+        gameOver: game.phase === 'finished'
+      });
+      
+      io.to(roomCode).emit('player_connection_restored', { playerId: socket.id });
+    } else {
+      console.log(`⚠️ Rejoin selhal - hráč ${oldSocketId} nenalezen ve hře ${roomCode}`);
+      socket.emit('rejoin_failed', { message: 'Nepodařilo se obnovit relaci hráče.' });
+    }
+  });
+
+  // 🆕 ÚMYSLNÝ ODCHOD (reload/zavření) - okamžité ukončení bez grace period
+  socket.on('player_leaving', ({ code }) => {
+    console.log(`👋 Hráč ${socket.id} záměrně opouští hru ${code}`);
+    
+    const game = games.get(code);
+    if (!game) return;
+    
+    const playerIndex = game.players.findIndex(p => p.id === socket.id);
+    if (playerIndex === -1) return;
+    
+    // Zrušit případný běžící grace period
+    const disconnectInfo = disconnectedPlayers.get(socket.id);
+    if (disconnectInfo) {
+      clearTimeout(disconnectInfo.timeout);
+      disconnectedPlayers.delete(socket.id);
+    }
+    
+    // Okamžitě ukončit hru
+    console.log(`💀 Okamžité ukončení hry ${code} (hráč záměrně odešel)`);
+    stopCountdown(code);
+    endGameSession(code);
+    io.to(code).emit('player_disconnected');
+    games.delete(code);
   });
 
   // ODPOJENÍ
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
 
-    // Spectator odchází
     if (socket.isSpectator && socket.spectatorGame) {
       const game = games.get(socket.spectatorGame);
       if (game && game.spectators) {
@@ -735,7 +775,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Hráč odchází - grace period
     games.forEach((game, code) => {
       const playerIndex = game.players.findIndex(p => p.id === socket.id);
       if (playerIndex !== -1) {
@@ -746,9 +785,7 @@ io.on('connection', (socket) => {
           if (currentGame) {
             console.log(`💀 Grace period vypršel, ukončuji hru ${code}`);
             
-            // Zastavit countdown pokud běží
             stopCountdown(code);
-            
             endGameSession(code);
             io.to(code).emit('player_disconnected');
             games.delete(code);
@@ -771,17 +808,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// === START SERVERU ===
-
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`
-╔════════════════════════════════════════╗
-║   ŠTVANICE Server v3.1                 ║
-║   ⏱️  35s COUNTDOWN (after roles)      ║
-║   🧠 LLM/DB alternating questions      ║
-║   ⚡ Rematch: instant start            ║
-║   🎬 Spectator: 139 Kč/month           ║
-╚════════════════════════════════════════╝
-  `);
-  console.log(`Visit: http://localhost:${PORT}`);
+  console.log('ŠTVANICE Server v3.2 running');
 });

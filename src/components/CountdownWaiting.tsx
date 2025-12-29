@@ -10,12 +10,15 @@ interface CountdownWaitingProps {
   onCountdownEnd: () => void;
 }
 
-// Mapování věkových skupin
+// Mapování věkových skupin - NOVÉ 3 KATEGORIE
 const AGE_GROUP_LABELS: Record<string, { emoji: string; name: string }> = {
   adult: { emoji: '👔', name: 'Dospělí' },
-  teen: { emoji: '🎒', name: 'Větší školáci' },
-  child: { emoji: '📚', name: 'Malí školáci' },
-  preschool: { emoji: '🐣', name: 'Předškoláci' }
+  student: { emoji: '🎒', name: 'Školáci' },
+  kids: { emoji: '🐣', name: 'Děti' },
+  // Legacy mappings
+  teen: { emoji: '🎒', name: 'Školáci' },
+  child: { emoji: '🐣', name: 'Děti' },
+  preschool: { emoji: '🐣', name: 'Děti' }
 };
 
 export default function CountdownWaiting({

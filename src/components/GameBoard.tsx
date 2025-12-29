@@ -48,8 +48,23 @@ export default function GameBoard({
   const { playSfx, playTickTack, stopTickTack } = useGameAudio();
   
   // Získání aktuálních pozic ze serveru (okamžité)
-  const serverHunterPos = players.find(p => p.role === 'hunter')?.position || 0;
-  const serverPreyPos = players.find(p => p.role === 'prey')?.position || 0;
+  const hunter = players.find(p => p.role === 'hunter');
+  const prey = players.find(p => p.role === 'prey');
+  
+  // 🆕 POJISTKA PROTI BÍLÉ OBRAZOVCE
+  // Pokud se data teprve načítají po reconnectu, zobraz loader
+  if (!hunter && !prey) {
+    return (
+      <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center text-white gap-4">
+        <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-xl font-bold">Načítám herní plán...</p>
+        <p className="text-slate-400 text-sm">Obnovuji spojení</p>
+      </div>
+    );
+  }
+  
+  const serverHunterPos = hunter?.position || 0;
+  const serverPreyPos = prey?.position || 0;
 
   // == LOKÁLNÍ STAV PRO VIZUÁLNÍ POZICE (ZPOŽDĚNÉ) ==
   // Figurky na mapě se budou řídit tímto, ne přímo props
@@ -176,8 +191,7 @@ export default function GameBoard({
     }
   };
 
-  const hunter = players.find(p => p.role === 'hunter');
-  const prey = players.find(p => p.role === 'prey');
+  // hunter a prey už jsou definovány výše
   const fields = Array.from({ length: 9 }, (_, i) => i);
   
   const getTimerColor = () => {

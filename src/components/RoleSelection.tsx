@@ -5,16 +5,19 @@ interface RoleSelectionProps {
   onSelectRole: (role: 'hunter' | 'prey') => void;
   selectedRole: string | null;
   rolesLocked: boolean;
-  ageGroup: string;  // Pouze pro zobrazení - už nelze změnit
+  ageGroup: string;  // 🆕 Místo gameMode
   roomCode: string;
 }
 
-// Mapování věkových skupin pro zobrazení
+// 🆕 NOVÉ 3 KATEGORIE - pro zobrazení
 const AGE_GROUP_LABELS: Record<string, { emoji: string; name: string; color: string }> = {
-  adult: { emoji: '👔', name: 'Dospělí', color: 'text-blue-400' },
-  teen: { emoji: '🎒', name: 'Větší školáci', color: 'text-purple-400' },
-  child: { emoji: '📚', name: 'Malí školáci', color: 'text-emerald-400' },
-  preschool: { emoji: '🐣', name: 'Předškoláci', color: 'text-pink-400' }
+  adult: { emoji: '👔', name: 'Dospělí', color: 'blue' },
+  student: { emoji: '🎒', name: 'Školáci', color: 'purple' },
+  kids: { emoji: '🐣', name: 'Děti', color: 'pink' },
+  // Legacy mappings
+  teen: { emoji: '🎒', name: 'Školáci', color: 'purple' },
+  child: { emoji: '🐣', name: 'Děti', color: 'pink' },
+  preschool: { emoji: '🐣', name: 'Děti', color: 'pink' }
 };
 
 export default function RoleSelection({ 
@@ -25,8 +28,6 @@ export default function RoleSelection({
   roomCode
 }: RoleSelectionProps) {
   const [isLoading, setIsLoading] = useState(false);
-  
-  const ageGroupData = AGE_GROUP_LABELS[ageGroup] || AGE_GROUP_LABELS.adult;
 
   // 🎫 Handler pro nákup vstupenky
   const handleBuyTicket = async () => {
@@ -48,80 +49,98 @@ export default function RoleSelection({
     }
   };
 
+  // Získej info o kategorii
+  const categoryInfo = AGE_GROUP_LABELS[ageGroup] || AGE_GROUP_LABELS.adult;
+  
+  // Barvy podle kategorie
+  const colorClasses = {
+    blue: {
+      bg: 'bg-blue-500/20',
+      border: 'border-blue-500',
+      text: 'text-blue-300'
+    },
+    purple: {
+      bg: 'bg-purple-500/20',
+      border: 'border-purple-500',
+      text: 'text-purple-300'
+    },
+    pink: {
+      bg: 'bg-pink-500/20',
+      border: 'border-pink-500',
+      text: 'text-pink-300'
+    }
+  };
+  
+  const colors = colorClasses[categoryInfo.color as keyof typeof colorClasses] || colorClasses.blue;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col items-center justify-start p-4 overflow-y-auto">
-      <div className="w-full max-w-md space-y-5 animate-fade-in py-6">
+      <div className="w-full max-w-md space-y-5 animate-fade-in py-8">
         
         {/* Hlavička */}
         <div className="text-center space-y-2">
           <h2 className="text-3xl font-bold text-white">
-            {rolesLocked ? 'Připravte se!' : 'Vyber si roli'}
+            Vyber si roli
           </h2>
           <p className="text-slate-400">
-            {rolesLocked ? 'Role jsou přiděleny' : 'Kdo klikne první, získá roli'}
+            {rolesLocked ? 'Tvoje role byla určena' : 'Kdo klikne první, získá roli'}
           </p>
         </div>
 
-        {/* Zobrazení vybrané kategorie (pouze informativní) */}
-        <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
-          <span className="text-slate-400 text-sm">Obtížnost: </span>
-          <span className={`font-bold ${ageGroupData.color}`}>
-            {ageGroupData.emoji} {ageGroupData.name}
-          </span>
+        {/* 🆕 ZOBRAZENÍ KATEGORIE (pouze informativně, nelze změnit) */}
+        <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700">
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-slate-500 text-xs uppercase font-bold tracking-widest">
+              Obtížnost otázek
+            </p>
+            <div className={`
+              px-6 py-3 rounded-full font-bold text-lg flex items-center gap-3 border-2 shadow-lg
+              ${colors.bg} ${colors.border} ${colors.text}
+            `}>
+              <span className="text-2xl">{categoryInfo.emoji}</span>
+              <span>{categoryInfo.name}</span>
+            </div>
+          </div>
         </div>
 
-        {/* === VÝBĚR ROLE === */}
-        <div className="space-y-3">
-          <p className="text-center text-slate-400 text-sm font-medium">
-            {rolesLocked ? 'Vaše role' : 'Klikněte pro výběr role'}
-          </p>
-          
-          {/* Tlačítko LOVEC */}
+        {/* Výběr role */}
+        <div className="space-y-4">
           <button
             onClick={() => onSelectRole('hunter')}
             disabled={rolesLocked && selectedRole !== 'hunter'}
-            className={`
-              w-full font-bold py-6 px-6 rounded-2xl text-xl shadow-lg 
-              transition-all transform active:scale-95 
-              flex items-center justify-center gap-4
-              ${selectedRole === 'hunter'
-                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-red-500/50 scale-[1.02]'
+            className={`w-full font-bold py-8 px-8 rounded-2xl text-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-4 ${
+              selectedRole === 'hunter'
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-red-500/50 scale-105'
                 : rolesLocked
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-red-500/50 hover:scale-[1.02]'
-              }
-            `}
+                : 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-red-500/50 hover:scale-105'
+            }`}
           >
-            <Target size={32} />
+            <Target size={40} />
             <div className="text-left">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">👹</span>
+                <span className="text-3xl">👹</span>
                 <span>JÁ JSEM LOVEC</span>
               </div>
               <p className="text-sm opacity-80 font-normal">Chytám Štvance</p>
             </div>
           </button>
 
-          {/* Tlačítko ŠTVANEC */}
           <button
             onClick={() => onSelectRole('prey')}
             disabled={rolesLocked && selectedRole !== 'prey'}
-            className={`
-              w-full font-bold py-6 px-6 rounded-2xl text-xl shadow-lg 
-              transition-all transform active:scale-95 
-              flex items-center justify-center gap-4
-              ${selectedRole === 'prey'
-                ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-green-500/50 scale-[1.02]'
+            className={`w-full font-bold py-8 px-8 rounded-2xl text-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-4 ${
+              selectedRole === 'prey'
+                ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-green-500/50 scale-105'
                 : rolesLocked
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white shadow-green-500/50 hover:scale-[1.02]'
-              }
-            `}
+                : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white shadow-green-500/50 hover:scale-105'
+            }`}
           >
-            <User size={32} />
+            <User size={40} />
             <div className="text-left">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">🏃</span>
+                <span className="text-3xl">🏃</span>
                 <span>JÁ JSEM ŠTVANEC</span>
               </div>
               <p className="text-sm opacity-80 font-normal">Utíkám před Lovcem</p>
@@ -148,7 +167,7 @@ export default function RoleSelection({
               </p>
             </div>
             
-            <p className="text-slate-400 text-sm mb-3 text-center">
+            <p className="text-slate-400 text-sm mb-3">
               Chcete, aby diváci mohli sledovat vaši hru na projektoru nebo TV?
             </p>
             

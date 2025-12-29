@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { ChevronLeft, Sparkles, Users, Baby, BookOpen, GraduationCap, Briefcase } from 'lucide-react';
+import { ChevronLeft, Sparkles, Users, GraduationCap, Briefcase, Baby } from 'lucide-react';
 
 interface CategorySelectionProps {
   onSelectAndCreate: (ageGroup: string) => void;
   onBack: () => void;
 }
 
-// 🎯 VĚKOVÉ SKUPINY
+// 🆕 NOVÉ 3 KATEGORIE
 const AGE_GROUPS = [
   {
     key: 'adult',
@@ -20,10 +20,10 @@ const AGE_GROUPS = [
     icon: Briefcase
   },
   {
-    key: 'teen',
-    name: 'Větší školáci',
+    key: 'student',
+    name: 'Školáci',
     emoji: '🎒',
-    description: 'Pro 5.-9. třídu (11-14 let)',
+    description: 'Pro středoškoláky (15-18 let)',
     gradient: 'from-purple-600 to-violet-700',
     hoverGradient: 'hover:from-purple-500 hover:to-violet-600',
     shadow: 'shadow-purple-500/30',
@@ -31,21 +31,10 @@ const AGE_GROUPS = [
     icon: GraduationCap
   },
   {
-    key: 'child',
-    name: 'Malí školáci',
-    emoji: '📚',
-    description: 'Pro 1.-4. třídu (7-10 let)',
-    gradient: 'from-emerald-600 to-green-700',
-    hoverGradient: 'hover:from-emerald-500 hover:to-green-600',
-    shadow: 'shadow-emerald-500/30',
-    border: 'border-emerald-500/50',
-    icon: BookOpen
-  },
-  {
-    key: 'preschool',
-    name: 'Předškoláci',
+    key: 'kids',
+    name: 'Děti',
     emoji: '🐣',
-    description: 'Pro nejmenší (4-6 let)',
+    description: 'Pro děti (6-12 let)',
     gradient: 'from-pink-500 to-rose-600',
     hoverGradient: 'hover:from-pink-400 hover:to-rose-500',
     shadow: 'shadow-pink-500/30',
