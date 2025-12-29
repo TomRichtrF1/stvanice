@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { useSocket } from './contexts/SocketContext';
 import { useGameAudio } from './hooks/useGameAudio';
 import Lobby from './components/Lobby';
+import CategorySelection from './components/CategorySelection';
 import WaitingRoom from './components/WaitingRoom';
 import RoleSelection from './components/RoleSelection';
+import CountdownWaiting from './components/CountdownWaiting';
 import HeadstartSelection from './components/HeadstartSelection';
 import GameBoard from './components/GameBoard';
 import SpectatorView from './components/SpectatorView';
@@ -11,7 +13,28 @@ import FAQ from './components/FAQ';
 import Success from './components/SuccessPage';
 import { AlertCircle } from 'lucide-react';
 
-type GamePhase = 'lobby' | 'waiting' | 'role_selection' | 'headstart_selection' | 'playing' | 'finished';
+/**
+ * 🎮 FLOW v3.1:
+ * 
+ * HOSTITEL:
+ * lobby → category_selection → waiting_for_player (LLM začíná) → role_selection → countdown (35s) → headstart → playing
+ * 
+ * HRÁČ 2:
+ * lobby → [zadá kód] → role_selection → countdown (35s) → headstart → playing
+ * 
+ * ODVETA:
+ * game_over → play_again → role_selection → headstart → playing (BEZ countdownu)
+ */
+
+type GamePhase = 
+  | 'lobby' 
+  | 'category_selection'
+  | 'waiting_for_player'
+  | 'role_selection' 
+  | 'countdown'
+  | 'headstart_selection' 
+  | 'playing' 
+  | 'finished';
 
 interface Player {
   id: string;
@@ -23,10 +46,18 @@ interface Question {
   question: string;
   options: string[];
   correct: number;
+  _fromLLM?: boolean;
+  _fromDb?: boolean;
+}
+
+interface AIProgress {
+  generated: number;
+  target: number;
+  ready?: boolean;
 }
 
 function App() {
-  // ✅ SUCCESS PAGE ROUTING (po úspěšné platbě)
+  // ✅ SUCCESS PAGE ROUTING
   const isSuccessPage = window.location.pathname.startsWith('/success');
   if (isSuccessPage) {
     return <Success />;
@@ -48,27 +79,44 @@ function App() {
   const { playAmbient, stopAmbient, playSfx } = useGameAudio();
   
   const [phase, setPhase] = useState<GamePhase>('lobby');
-  const [gameMode, setGameMode] = useState<'adult' | 'kid'>('adult');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
+  // Nastavení hry
+  const [ageGroup, setAgeGroup] = useState<string>('adult');
+  const [gameMode, setGameMode] = useState<'adult' | 'kid'>('adult');
+  
+  // Countdown
+  const [countdown, setCountdown] = useState<number>(35);
+  const [aiProgress, setAiProgress] = useState<AIProgress>({ generated: 0, target: 8 });
+  const [isRematch, setIsRematch] = useState<boolean>(false);
+  
+  // Hra
   const [roomCode, setRoomCode] = useState<string>('');
   const [myRole, setMyRole] = useState<'hunter' | 'prey' | null>(null);
   const [rolesLocked, setRolesLocked] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [playersCount, setPlayersCount] = useState<number>(1);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState<'hunter' | 'prey' | null>(null);
   const [roundResult, setRoundResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [disconnected, setDisconnected] = useState(false);
+  const [isResyncing, setIsResyncing] = useState(false);
 
   // === AUDIO LOGIKA ===
   useEffect(() => {
     const shouldPlayAmbient = 
       phase === 'lobby' || 
-      phase === 'waiting' || 
+      phase === 'category_selection' ||
+      phase === 'waiting_for_player' ||
       phase === 'role_selection' || 
       phase === 'headstart_selection';
+
+    // Countdown má vlastní audio
+    if (phase === 'countdown') {
+      stopAmbient();
+      return;
+    }
 
     if (shouldPlayAmbient) {
       playAmbient();
@@ -77,7 +125,7 @@ function App() {
     }
 
     if (phase === 'playing' && !gameOver) {
-       playSfx('gamestart.mp3');
+      playSfx('gamestart.mp3');
     }
 
     const handleUserInteraction = () => {
@@ -92,22 +140,83 @@ function App() {
     };
   }, [phase, gameOver, playAmbient, stopAmbient, playSfx]);
 
+  // === SOCKET EVENTS ===
   useEffect(() => {
     if (!socket) return;
     
-    socket.on('game_created', ({ code }) => { setRoomCode(code); setPhase('waiting'); });
-    socket.on('game_joined', ({ code }) => { setRoomCode(code); });
+    // Hra vytvořena - jde do waiting_for_player
+    socket.on('game_created', ({ code, ageGroup: group, phase: initialPhase }) => {
+      console.log('🎮 Game created:', code, group);
+      setRoomCode(code);
+      setAgeGroup(group);
+      setGameMode(group === 'adult' ? 'adult' : 'kid');
+      setPlayersCount(1);
+      setIsRematch(false);
+      setPhase(initialPhase || 'waiting_for_player');
+    });
+
+    // Hráč 2 se připojil
+    socket.on('game_joined', ({ code, ageGroup: group, phase: currentPhase }) => {
+      console.log('🎮 Joined game:', code, group, currentPhase);
+      setRoomCode(code);
+      if (group) {
+        setAgeGroup(group);
+        setGameMode(group === 'adult' ? 'adult' : 'kid');
+      }
+      if (currentPhase) {
+        setPhase(currentPhase);
+      }
+    });
+
+    // Hráč přibyl
+    socket.on('player_joined', ({ playersCount: count }) => {
+      setPlayersCount(count);
+    });
+
+    // Countdown začal (po výběru role)
+    socket.on('countdown_started', ({ countdown: initialCountdown, ageGroup: group }) => {
+      console.log('⏱️ Countdown started:', initialCountdown);
+      setCountdown(initialCountdown);
+      setPhase('countdown');
+    });
+    
+    // Countdown tick
+    socket.on('countdown_tick', ({ remaining, aiProgress: progress, playersCount: count }) => {
+      setCountdown(remaining);
+      if (progress) {
+        setAiProgress(progress);
+      }
+      if (count !== undefined) {
+        setPlayersCount(count);
+      }
+    });
+
+    // Countdown skončil
+    socket.on('countdown_complete', ({ aiReady, questionCount }) => {
+      console.log('⏰ Countdown complete, AI ready:', aiReady, 'questions:', questionCount);
+    });
+
+    // Odveta začala
+    socket.on('rematch_started', ({ isRematch: rematch }) => {
+      console.log('🔄 Rematch started');
+      setIsRematch(rematch);
+      setMyRole(null);
+      setRolesLocked(false);
+    });
 
     socket.on('start_resolution', () => {
       playSfx('resolution.mp3');
     });
     
     socket.on('settings_changed', (settings: any) => {
-      setGameMode(settings.mode);
-      setSelectedCategory(settings.category);
+      if (settings.ageGroup) {
+        setAgeGroup(settings.ageGroup);
+        setGameMode(settings.ageGroup === 'adult' ? 'adult' : 'kid');
+      }
     });
 
     socket.on('phase_change', ({ phase: newPhase }) => {
+      console.log('📍 Phase change:', newPhase);
       setPhase(newPhase);
       if (newPhase === 'role_selection' || newPhase === 'headstart_selection') {
         setGameOver(false); 
@@ -157,23 +266,40 @@ function App() {
       setDisconnected(true); 
     });
 
-    // 🕐 Unstable connection warning (grace period)
     socket.on('player_connection_unstable', ({ gracePeriod }) => {
       console.log(`⚠️ Soupeř má nestabilní připojení (grace period: ${gracePeriod/1000}s)`);
-      // Můžeme zobrazit upozornění uživateli
     });
 
-    // 🔄 Game state sync při reconnectu
     socket.on('game_state_sync', (state) => {
       console.log('🔄 Game state sync:', state);
+      setIsResyncing(false);
+      
       if (state.phase) setPhase(state.phase);
-      if (state.players) setPlayers(state.players);
+      if (state.players) {
+        setPlayers(state.players);
+        setPlayersCount(state.players.length);
+        const me = state.players.find((p: any) => p.id === socket.id);
+        if (me && me.role) setMyRole(me.role);
+      }
       if (state.currentQuestion) setCurrentQuestion(state.currentQuestion);
+      if (state.countdown !== undefined) setCountdown(state.countdown);
+      if (state.settings) {
+        if (state.settings.ageGroup) {
+          setAgeGroup(state.settings.ageGroup);
+          setGameMode(state.settings.ageGroup === 'adult' ? 'adult' : 'kid');
+        }
+      }
+      if (state.aiProgress) setAiProgress(state.aiProgress);
     });
 
     return () => {
-      socket.off('game_created'); 
-      socket.off('game_joined'); 
+      socket.off('game_created');
+      socket.off('game_joined');
+      socket.off('player_joined');
+      socket.off('countdown_started');
+      socket.off('countdown_tick');
+      socket.off('countdown_complete');
+      socket.off('rematch_started');
       socket.off('settings_changed');
       socket.off('phase_change'); 
       socket.off('roles_updated');
@@ -189,7 +315,7 @@ function App() {
     };
   }, [socket]);
 
-  // 📱 Visibility change - oznámit serveru pause/resume
+  // Visibility change handler
   useEffect(() => {
     if (!socket || !roomCode) return;
     
@@ -197,7 +323,10 @@ function App() {
       if (document.visibilityState === 'hidden') {
         socket.emit('player_paused', { code: roomCode });
       } else {
+        console.log('👁️ Uživatel se vrátil, žádám resync...');
+        setIsResyncing(true);
         socket.emit('player_resumed', { code: roomCode });
+        setTimeout(() => setIsResyncing(false), 2000);
       }
     };
     
@@ -205,9 +334,19 @@ function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [socket, roomCode]);
 
+  // === HANDLERS ===
+  
   const handleCreateGame = () => {
-    playAmbient(); 
-    socket?.emit('create_game');
+    playAmbient();
+    setPhase('category_selection');
+  };
+
+  const handleSelectCategoryAndCreate = (selectedAgeGroup: string) => {
+    socket?.emit('create_game_with_category', { ageGroup: selectedAgeGroup });
+  };
+
+  const handleBackToLobby = () => {
+    setPhase('lobby');
   };
 
   const handleJoinGame = (code: string) => {
@@ -215,21 +354,27 @@ function App() {
     socket?.emit('join_game', code);
   };
 
-  const handleSelectRole = (role: 'hunter' | 'prey') => socket?.emit('select_role', { code: roomCode, role });
-  const handleSelectHeadstart = (headstart: number) => socket?.emit('select_headstart', { code: roomCode, headstart });
-  const handleSubmitAnswer = (answerIndex: number) => socket?.emit('submit_answer', { code: roomCode, answerIndex });
-  const handlePlayAgain = () => socket?.emit('play_again', { code: roomCode });
+  const handleCountdownEnd = () => {
+    console.log('⏰ Countdown end (client-side)');
+  };
+
+  const handleSelectRole = (role: 'hunter' | 'prey') => {
+    socket?.emit('select_role', { code: roomCode, role });
+  };
   
-  // ✅ NOVÉ: Funkce pro změnu módu (JUNIOR/DOSPĚLÝ)
-  const handleUpdateSettings = (mode: 'adult' | 'kid') => {
-    socket?.emit('update_settings', { code: roomCode, mode });
+  const handleSelectHeadstart = (headstart: number) => {
+    socket?.emit('select_headstart', { code: roomCode, headstart });
+  };
+  
+  const handleSubmitAnswer = (answerIndex: number) => {
+    socket?.emit('submit_answer', { code: roomCode, answerIndex });
+  };
+  
+  const handlePlayAgain = () => {
+    socket?.emit('play_again', { code: roomCode });
   };
 
-  // ✅ NOVÉ: Funkce pro změnu kategorie
-  const handleUpdateCategory = (category: string | null) => {
-    socket?.emit('update_category', { code: roomCode, category });
-  };
-
+  // === LOADING STATE ===
   if (!connected) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -241,6 +386,19 @@ function App() {
     );
   }
 
+  // === RESYNCING STATE ===
+  if (isResyncing) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-white text-xl">Synchronizace...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // === DISCONNECTED STATE ===
   if (disconnected) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -259,8 +417,10 @@ function App() {
     );
   }
 
+  // === RENDER ===
   return (
     <>
+      {/* Error toast */}
       {error && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-slide-down">
           <div className="bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2">
@@ -270,28 +430,48 @@ function App() {
         </div>
       )}
       
+      {/* LOBBY */}
       {phase === 'lobby' && (
         <Lobby onCreateGame={handleCreateGame} onJoinGame={handleJoinGame} />
       )}
       
-      {phase === 'waiting' && (
+      {/* VÝBĚR KATEGORIE */}
+      {phase === 'category_selection' && (
+        <CategorySelection 
+          onSelectAndCreate={handleSelectCategoryAndCreate}
+          onBack={handleBackToLobby}
+        />
+      )}
+      
+      {/* ČEKÁNÍ NA HRÁČE 2 */}
+      {phase === 'waiting_for_player' && (
         <WaitingRoom roomCode={roomCode} socket={socket} />
       )}
       
-      {/* ✅ ROLE SELECTION - nyní s přepínačem módu a kategorie */}
+      {/* VÝBĚR ROLE */}
       {phase === 'role_selection' && (
         <RoleSelection 
           onSelectRole={handleSelectRole} 
           selectedRole={myRole} 
           rolesLocked={rolesLocked}
-          gameMode={gameMode}
-          selectedCategory={selectedCategory}
-          onUpdateSettings={handleUpdateSettings}
-          onUpdateCategory={handleUpdateCategory}
+          ageGroup={ageGroup}
           roomCode={roomCode}
         />
       )}
+
+      {/* COUNTDOWN (po výběru role) */}
+      {phase === 'countdown' && (
+        <CountdownWaiting
+          roomCode={roomCode}
+          countdown={countdown}
+          playersCount={playersCount}
+          ageGroup={ageGroup}
+          aiProgress={aiProgress}
+          onCountdownEnd={handleCountdownEnd}
+        />
+      )}
       
+      {/* HEADSTART SELECTION */}
       {phase === 'headstart_selection' && (
         <HeadstartSelection 
           isPreyPlayer={myRole === 'prey'} 
@@ -299,6 +479,7 @@ function App() {
         />
       )}
       
+      {/* GAME BOARD */}
       {(phase === 'playing' || phase === 'finished') && myRole && (
         <GameBoard 
           myRole={myRole} 
@@ -310,7 +491,7 @@ function App() {
           roundResult={roundResult} 
           roomCode={roomCode} 
           onRestart={handlePlayAgain} 
-          gameMode={gameMode} 
+          gameMode={gameMode}
         />
       )}
     </>

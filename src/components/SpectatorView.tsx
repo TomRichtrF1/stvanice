@@ -711,6 +711,14 @@ export default function SpectatorView() {
                 {/* Question text */}
                 <div className="text-center">
                   <p className="text-white text-xl font-bold">{gameState.currentQuestion.question}</p>
+                  {/* 🆕 Badge zdroje */}
+                  <span className={`inline-block mt-2 text-xs px-2 py-1 rounded ${
+                      (gameState.currentQuestion as any)._fromLLM 
+                          ? 'bg-green-900/50 text-green-400' 
+                          : 'bg-blue-900/50 text-blue-400'
+                  }`}>
+                      {(gameState.currentQuestion as any)._fromLLM ? '⚡ AI' : '🗄️ DB'}
+                  </span>
                 </div>
                 
                 {/* Options */}

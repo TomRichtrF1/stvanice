@@ -15,6 +15,7 @@ interface Question {
   question: string;
   options: string[];
   correct: number;
+  _fromLLM?: boolean;  // 🆕 Badge: true = AI generováno, false/undefined = z DB
 }
 
 interface GameBoardProps {
@@ -329,9 +330,19 @@ export default function GameBoard({
 
                         {/* Text otázky */}
                         <div className="flex justify-between items-start gap-3 mb-1">
-                            <h3 className="text-white font-bold text-sm md:text-2xl leading-snug max-h-[60px] md:max-h-none overflow-y-auto md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-                                {currentQuestion.question}
-                            </h3>
+                            <div className="flex-1">
+                                <h3 className="text-white font-bold text-sm md:text-2xl leading-snug max-h-[60px] md:max-h-none overflow-y-auto md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                                    {currentQuestion.question}
+                                </h3>
+                                {/* 🆕 Badge zdroje - minimální vizuální prvek */}
+                                <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded ${
+                                    currentQuestion._fromLLM 
+                                        ? 'bg-green-900/50 text-green-400' 
+                                        : 'bg-blue-900/50 text-blue-400'
+                                }`}>
+                                    {currentQuestion._fromLLM ? '⚡ LLM' : '🗄️ DB'}
+                                </span>
+                            </div>
                             {!roundResult && (
                                 <div className={`shrink-0 w-8 h-8 md:w-16 md:h-16 rounded-lg border-2 flex items-center justify-center font-mono font-bold text-sm md:text-3xl ${getTimerColor()}`}>
                                     {timeLeft}

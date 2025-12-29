@@ -237,9 +237,9 @@ export default function FAQ() {
           </div>
           
           <div className="space-y-3 text-slate-400 text-sm">
-            <p><span className="text-slate-300 font-semibold">Naprogramováno s pomocí:</span> Bolt.new, Gemini, Claude, Cursor, Perplexity</p>
+            <p><span className="text-slate-300 font-semibold">Naprogramováno s pomocí:</span> Bolt.new, Gemini, Claude, Cursor, Perplexity, SQlite</p>
             <p><span className="text-slate-300 font-semibold">Platební služba:</span> Stripe (ověřená a bezpečná)</p>
-            <p><span className="text-slate-300 font-semibold">AI model:</span> Groq (Llama)</p>
+            <p><span className="text-slate-300 font-semibold">AI modely:</span> Groq (Llama), sonar-pro (I6uW)</p>
           </div>
         </section>
 
