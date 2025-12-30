@@ -15,7 +15,7 @@ import {
   endGameSession
 } from './question_generator.js';
 
-// Import databáze (zde se importuje modul, který se předává do connectDatabase)
+// Import databáze
 import * as questionDatabase from './question_database.js';
 
 dotenv.config();
@@ -29,7 +29,7 @@ const httpServer = createServer(app);
 // Nastavení CORS pro Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: "*", // V produkci by zde měla být URL tvé aplikace, pro testování * nevadí
+    origin: "*", 
     methods: ["GET", "POST"]
   }
 });
@@ -41,7 +41,7 @@ app.use(express.static(path.join(__dirname, 'dist')));
 
 // === API ENDPOINTS ===
 
-// 1. Health check pro Heroku (aby vědělo, že aplikace běží)
+// 1. Health check pro Heroku
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
@@ -51,14 +51,12 @@ app.get('/api/stats', (req, res) => {
   res.json(getValidationStats());
 });
 
-// 3. Fallback pro React Router
-app.get('*', (req, res) => {
+// 3. Fallback pro React Router (OPRAVENO: * nahrazeno za /(.*))
+app.get('/(.*)', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 // === HERNÍ LOGIKA (SOCKET.IO) ===
-// Ukládáme stav místností:
-// { players: [], gameState: 'waiting'|'roles'|'playing'|'finished', ageGroup: 'adult', ... }
 const activeRooms = new Map();
 
 io.on('connection', (socket) => {
@@ -68,13 +66,12 @@ io.on('connection', (socket) => {
   socket.on('create_room', async ({ roomCode, ageGroup }) => {
     socket.join(roomCode);
     
-    // Inicializace stavu místnosti
     activeRooms.set(roomCode, {
       players: [{ 
         id: socket.id, 
         role: null, 
         score: 0,
-        connected: true // Sledujeme připojení
+        connected: true 
       }],
       ageGroup: ageGroup || 'adult',
       gameStarted: false,
@@ -82,13 +79,12 @@ io.on('connection', (socket) => {
       totalRounds: 10,
       scores: { chaser: 0, fugitive: 0 },
       settings: {
-        headstart: 0 // Výchozí náskok
+        headstart: 0 
       },
-      questionHistory: [] // Historie otázek pro tuto hru
+      questionHistory: [] 
     });
 
     console.log(`Room ${roomCode} created. Category: ${ageGroup}`);
-    // Poznámka: Pre-warming cache se řeší interně v generatoru
   });
 
   // 2. Připojení do existující
@@ -104,7 +100,6 @@ io.on('connection', (socket) => {
         connected: true
       });
       
-      // Oznámíme klientům nový počet hráčů
       io.to(roomCode).emit('player_joined', { playerCount: room.players.length });
       console.log(`User ${socket.id} joined room ${roomCode}`);
     } else {
@@ -112,16 +107,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 2b. Rejoin (pokud hráč obnoví stránku)
+  // 2b. Rejoin 
   socket.on('rejoin_room', ({ roomCode }) => {
     const room = activeRooms.get(roomCode);
     if (room) {
-      // Najdeme hráče, který se snaží vrátit (podle ID to nepůjde, socket.id je nové)
-      // V reálné appce bychom potřebovali trvalejší ID (např. v localStorage).
-      // Zde zjednodušeně: pokud je místo, pustíme ho zpět.
-      // Pro MVP: Rejoin zatím řešíme jako nový join, klient si musí hlídat stav.
-      
-      // Pokud je hra už rozehraná, pošleme mu aktuální stav
       socket.join(roomCode);
       socket.emit('game_state_sync', {
         gameState: room.gameStarted ? 'playing' : 'waiting',
@@ -131,12 +120,11 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 3. Aktualizace nastavení (kategorie)
+  // 3. Aktualizace nastavení
   socket.on('update_room_settings', ({ roomCode, settings }) => {
     const room = activeRooms.get(roomCode);
     if (room) {
       if (settings.ageGroup) room.ageGroup = settings.ageGroup;
-      // Propagujeme změnu druhému hráči
       socket.to(roomCode).emit('room_settings_updated', settings);
     }
   });
@@ -148,8 +136,6 @@ io.on('connection', (socket) => {
       const player = room.players.find(p => p.id === socket.id);
       if (player) {
         player.role = role;
-        
-        // Pokud mají oba hráči roli, můžeme jít dál
         const rolesFilled = room.players.filter(p => p.role).length === 2;
         if (rolesFilled) {
            io.to(roomCode).emit('roles_assigned', { players: room.players });
@@ -158,7 +144,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 5. Start hry (po výběru rolí a případně náskoku)
+  // 5. Start hry
   socket.on('start_game', ({ roomCode }) => {
     const room = activeRooms.get(roomCode);
     if (room) {
@@ -167,18 +153,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 5b. Výběr náskoku (Headstart)
+  // 5b. Výběr náskoku
   socket.on('select_headstart', ({ roomCode, steps }) => {
     const room = activeRooms.get(roomCode);
     if (room) {
       room.settings.headstart = steps;
-      // Aplikujeme náskok do skóre
       room.scores.fugitive = steps;
-      
-      io.to(roomCode).emit('headstart_selected', { 
-        steps, 
-        scores: room.scores 
-      });
+      io.to(roomCode).emit('headstart_selected', { steps, scores: room.scores });
     }
   });
 
@@ -186,12 +167,8 @@ io.on('connection', (socket) => {
   socket.on('request_question', async ({ roomCode }) => {
     const room = activeRooms.get(roomCode);
     if (room) {
-        // Generování otázky (ASYNC - čeká na DB nebo LLM)
         const qData = await generateQuestion(roomCode, room.ageGroup);
-        
-        // Uložíme do historie (pro debug/kontrolu)
         room.questionHistory.push(qData);
-
         io.to(roomCode).emit('new_question', qData);
     }
   });
@@ -201,22 +178,18 @@ io.on('connection', (socket) => {
     const room = activeRooms.get(roomCode);
     if (room) {
         const player = room.players.find(p => p.id === socket.id);
-        
         if (player && correct) {
-            // Logika bodování
             if (player.role === 'chaser') {
-              room.scores.chaser += 1; // Lovec se přibližuje
+              room.scores.chaser += 1; 
             } else if (player.role === 'fugitive') {
-              room.scores.fugitive += 1; // Štvanec utíká
+              room.scores.fugitive += 1; 
             }
         }
-        
-        // Pošleme aktualizované skóre všem
         io.to(roomCode).emit('score_update', room.scores);
     }
   });
 
-  // 8. Skip otázky (pokud se zasekne nebo je moc těžká - volitelné)
+  // 8. Skip otázky
   socket.on('skip_question', async ({ roomCode }) => {
      const room = activeRooms.get(roomCode);
      if (room) {
@@ -225,27 +198,24 @@ io.on('connection', (socket) => {
      }
   });
 
-  // 9. Synchronizace času (volitelné pro přesnější odpočty)
+  // 9. Synchronizace času
   socket.on('time_sync', ({ roomCode, timeLeft }) => {
     socket.to(roomCode).emit('time_sync_update', { timeLeft });
   });
 
-  // Odpojení
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
-    // Zde bychom mohli řešit pauzu hry, nebo smazání roomky po čase
-    // activeRooms.forEach((room, code) => { ... })
   });
 });
 
-// === SPOUŠTĚNÍ SERVERU (ASYNC START) ===
+// === SPOUŠTĚNÍ SERVERU ===
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
     console.log('⏳ Server: Připojuji k databázi...');
     
-    // 1. Připojení k DB (čekáme, až se Postgres spojí)
+    // 1. Připojení k DB
     const dbSuccess = await connectDatabase(questionDatabase);
     
     if (dbSuccess) {
@@ -254,7 +224,7 @@ async function startServer() {
       console.warn('⚠️ Server: Běžíme bez databáze (pouze LLM cache) - Zkontrolujte DATABASE_URL!');
     }
 
-    // 2. Start naslouchání až po připojení DB
+    // 2. Start naslouchání
     httpServer.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
