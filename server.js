@@ -51,8 +51,8 @@ app.get('/api/stats', (req, res) => {
   res.json(getValidationStats());
 });
 
-// 3. Fallback pro React Router
-app.get('*', (req, res) => {
+// 3. Fallback pro React Router (OPRAVENO: Používáme Regex /.*/ místo stringu)
+app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
