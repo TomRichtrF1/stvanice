@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { ChevronLeft, Sparkles, Users, GraduationCap, Briefcase, Baby } from 'lucide-react';
+import { ChevronLeft, Sparkles, Users, GraduationCap, Briefcase, Baby, Eye, Ticket } from 'lucide-react';
+
+// Stripe Payment Link - cena 139 Kč/měsíc
+const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/bJebJ15E3bXs7DG8l25wI01';
 
 interface CategorySelectionProps {
   onSelectAndCreate: (ageGroup: string) => void;
@@ -153,6 +156,30 @@ export default function CategorySelection({ onSelectAndCreate, onBack }: Categor
         <p className="text-center text-slate-500 text-sm">
           Po založení hry obdržíš kód pro spoluhráče
         </p>
+
+        {/* 🆕 Divácká místnost nabídka */}
+        <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 rounded-2xl p-4 border border-amber-500/30 space-y-3">
+          <div className="flex items-center gap-2 justify-center text-amber-400">
+            <Eye size={20} />
+            <span className="font-bold uppercase tracking-wide text-sm">Divácká místnost</span>
+          </div>
+          <p className="text-center text-slate-400 text-sm">
+            Chcete, aby diváci mohli sledovat vaši hru na projektoru nebo TV?
+          </p>
+          <a
+            href={STRIPE_CHECKOUT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg shadow-amber-500/20 mx-auto"
+          >
+            <Ticket size={18} />
+            <span>KOUPIT VSTUPENKU</span>
+            <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">139 Kč/měsíc</span>
+          </a>
+          <p className="text-center text-slate-500 text-xs">
+            Jednorázová platba, bez automatického obnovování
+          </p>
+        </div>
 
         {/* Pozadí efekty */}
         <div className="fixed inset-0 pointer-events-none -z-10">

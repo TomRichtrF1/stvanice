@@ -379,14 +379,21 @@ export default function SpectatorView() {
       }
     });
 
-    socket.on('game_start', ({ positions }) => {
+    socket.on('game_start', ({ positions, question }) => {
+      console.log('🎬 game_start event přijat:', { positions, question });
+      
       setGameState(prev => {
         if (!prev) return null;
         const updatedPlayers = prev.players.map(p => {
           const pos = positions.find((pos: any) => pos.id === p.id);
           return pos ? { ...p, position: pos.position, role: pos.role } : p;
         });
-        return { ...prev, players: updatedPlayers };
+        return { 
+          ...prev, 
+          phase: 'playing',  // 🆕 BUG21 FIX: Nastavit phase na playing
+          players: updatedPlayers,
+          currentQuestion: question || prev.currentQuestion
+        };
       });
       
       const hunter = positions.find((p: any) => p.role === 'hunter');
@@ -394,7 +401,14 @@ export default function SpectatorView() {
       if (hunter) setDisplayHunterPos(hunter.position);
       if (prey) setDisplayPreyPos(prey.position);
       
-      // 🔊 Game start sound - hraje jen při startu hry, ne při každé otázce
+      // Reset odpovědí a výsledků pro novou hru
+      setHunterAnswer(null);
+      setPreyAnswer(null);
+      setShowResults(false);
+      setCorrectAnswer(null);
+      setWinner(null);
+      
+      // 🔊 Game start sound
       playSound('gamestart');
     });
 
@@ -421,6 +435,18 @@ export default function SpectatorView() {
       sessionStorage.removeItem('spectator_premiumCode');
     });
 
+    // 🆕 BUG26: Handler pro opuštění hry hráčem (timeout nebo zavření okna)
+    socket.on('player_left_game', ({ reason, leftPlayer }) => {
+      console.log(`🎬 Hráč ${leftPlayer} opustil hru: ${reason}`);
+      setGameEnded(true);
+      setGameEndReason(reason || 'Hráč opustil hru');
+      setGameState(null);
+      setWinner(null);
+      setIsConnected(false);
+      sessionStorage.removeItem('spectator_gameCode');
+      sessionStorage.removeItem('spectator_premiumCode');
+    });
+
     return () => {
       socket.off('spectator_joined');
       socket.off('spectator_error');
@@ -438,6 +464,7 @@ export default function SpectatorView() {
       socket.off('game_start');
       socket.off('roles_updated');
       socket.off('player_disconnected');
+      socket.off('player_left_game');
     };
   }, [socket, displayHunterPos, displayPreyPos, gameCode, premiumCode]);
 
@@ -497,25 +524,11 @@ export default function SpectatorView() {
     // Premium kód zůstává
   };
 
-  const handleBuyTicket = async () => {
-    try {
-      const response = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+  // Stripe Payment Link - cena 139 Kč/měsíc
+  const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/bJebJ15E3bXs7DG8l25wI01';
 
-      const data = await response.json();
-
-      if (data.error) {
-        setError(data.error);
-        return;
-      }
-
-      window.location.href = data.url;
-    } catch (err) {
-      console.error('Error creating checkout:', err);
-      setError('Chyba při vytváření platby');
-    }
+  const handleBuyTicket = () => {
+    window.open(STRIPE_CHECKOUT_URL, '_blank');
   };
 
   // 🆕 Helper pro získání textu režimu
@@ -763,19 +776,19 @@ export default function SpectatorView() {
             </h1>
           </div>
 
-          {/* Herní tabule - prázdná (hra ještě nezačala) */}
+          {/* Herní tabule - prázdná (hra ještě nezačala) - OBRÁCENÉ POŘADÍ */}
           <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
             <div className="space-y-2">
-              {/* START */}
-              <div className="rounded-xl p-3 text-center border bg-red-900/30 border-red-500/30">
+              {/* CÍL - nahoře */}
+              <div className="rounded-xl p-3 text-center border bg-green-900/30 border-green-500/30">
                 <div className="flex items-center justify-between px-2">
-                  <span className="text-red-400 font-bold text-sm">START</span>
-                  <span className="text-slate-500 text-sm">👹 Lovec</span>
+                  <span className="text-green-400 font-bold text-sm">CÍL</span>
+                  <span className="text-slate-500 text-sm">🏃 Štvanec</span>
                 </div>
               </div>
               
-              {/* Positions 1-7 */}
-              {[1, 2, 3, 4, 5, 6, 7].map((pos) => (
+              {/* Positions 7-1 (sestupně) */}
+              {[7, 6, 5, 4, 3, 2, 1].map((pos) => (
                 <div 
                   key={pos}
                   className="rounded-xl p-3 flex items-center justify-between bg-slate-900/50 border border-slate-700/50"
@@ -784,11 +797,11 @@ export default function SpectatorView() {
                 </div>
               ))}
               
-              {/* CÍL */}
-              <div className="rounded-xl p-3 text-center border bg-green-900/30 border-green-500/30">
+              {/* START - dole */}
+              <div className="rounded-xl p-3 text-center border bg-red-900/30 border-red-500/30">
                 <div className="flex items-center justify-between px-2">
-                  <span className="text-green-400 font-bold text-sm">CÍL</span>
-                  <span className="text-slate-500 text-sm">🏃 Štvanec</span>
+                  <span className="text-red-400 font-bold text-sm">START</span>
+                  <span className="text-slate-500 text-sm">👹 Lovec</span>
                 </div>
               </div>
             </div>
@@ -887,22 +900,22 @@ export default function SpectatorView() {
           <div className="lg:w-1/2">
             <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
               
-              {/* Positions */}
+              {/* Positions - OBRÁCENÉ POŘADÍ: CÍL nahoře, START dole */}
               <div className="space-y-2">
-                {/* START */}
-                <div className={`rounded-xl p-3 text-center border transition-all duration-500 ${displayHunterPos === 0 ? 'bg-red-900/50 border-red-500' : 'bg-red-900/30 border-red-500/30'}`}>
+                {/* CÍL - nahoře */}
+                <div className={`rounded-xl p-3 text-center border transition-all duration-500 ${displayPreyPos >= 8 ? 'bg-green-900/50 border-green-500' : 'bg-green-900/30 border-green-500/30'}`}>
                   <div className="flex items-center justify-between px-2">
-                    <span className="text-red-400 font-bold text-sm">START</span>
-                    {displayHunterPos === 0 && (
-                      <span className="bg-red-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 animate-pulse">
-                        👹 LOVEC
+                    <span className="text-green-400 font-bold text-sm">CÍL</span>
+                    {displayPreyPos >= 8 && (
+                      <span className="bg-green-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                        🏃 ŠTVANEC
                       </span>
                     )}
                   </div>
                 </div>
                 
-                {/* Positions 1-7 */}
-                {[1, 2, 3, 4, 5, 6, 7].map((pos) => {
+                {/* Positions 7-1 (sestupně) */}
+                {[7, 6, 5, 4, 3, 2, 1].map((pos) => {
                   const hunterHere = displayHunterPos === pos;
                   const preyHere = displayPreyPos === pos;
                   
@@ -932,13 +945,13 @@ export default function SpectatorView() {
                   );
                 })}
                 
-                {/* CÍL */}
-                <div className={`rounded-xl p-3 text-center border transition-all duration-500 ${displayPreyPos >= 8 ? 'bg-green-900/50 border-green-500' : 'bg-green-900/30 border-green-500/30'}`}>
+                {/* START - dole */}
+                <div className={`rounded-xl p-3 text-center border transition-all duration-500 ${displayHunterPos === 0 ? 'bg-red-900/50 border-red-500' : 'bg-red-900/30 border-red-500/30'}`}>
                   <div className="flex items-center justify-between px-2">
-                    <span className="text-green-400 font-bold text-sm">CÍL</span>
-                    {displayPreyPos >= 8 && (
-                      <span className="bg-green-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
-                        🏃 ŠTVANEC
+                    <span className="text-red-400 font-bold text-sm">START</span>
+                    {displayHunterPos === 0 && (
+                      <span className="bg-red-600 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 animate-pulse">
+                        👹 LOVEC
                       </span>
                     )}
                   </div>
@@ -1033,11 +1046,11 @@ export default function SpectatorView() {
                         ✓ Vyhodnoceno • Čekám na hráče...
                       </p>
                       
-                      {/* Perplexity fact-check odkaz */}
+                      {/* Perplexity fact-check odkaz - vylepšený dotaz */}
                       {gameState.currentQuestion && correctAnswer !== null && (
                         <a
                           href={`https://www.perplexity.ai/search?q=${encodeURIComponent(
-                            gameState.currentQuestion.question
+                            `${gameState.currentQuestion.question} Je správná odpověď A) ${gameState.currentQuestion.options[0]}, B) ${gameState.currentQuestion.options[1]}, nebo C) ${gameState.currentQuestion.options[2]}?`
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"

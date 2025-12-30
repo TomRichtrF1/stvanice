@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Target, User, CheckCircle, XCircle, Clock, Play, Baby, Brain, Skull, Flag } from 'lucide-react';
+import { Target, User, CheckCircle, XCircle, Clock, Play, Baby, Brain, Skull, Flag, Loader } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import { useGameAudio } from '../hooks/useGameAudio';
 import GameEndOverlay from './GameEndOverlay';
@@ -15,7 +15,8 @@ interface Question {
   question: string;
   options: string[];
   correct: number;
-  _fromLLM?: boolean;  // 🆕 Badge: true = AI generováno, false/undefined = z DB
+  _fromLLM?: boolean;
+  _fromDb?: boolean;
 }
 
 interface GameBoardProps {
@@ -47,12 +48,10 @@ export default function GameBoard({
   const { socket } = useSocket();
   const { playSfx, playTickTack, stopTickTack } = useGameAudio();
   
-  // Získání aktuálních pozic ze serveru (okamžité)
   const hunter = players.find(p => p.role === 'hunter');
   const prey = players.find(p => p.role === 'prey');
   
-  // 🆕 POJISTKA PROTI BÍLÉ OBRAZOVCE
-  // Pokud se data teprve načítají po reconnectu, zobraz loader
+  // POJISTKA PROTI BÍLÉ OBRAZOVCE
   if (!hunter && !prey) {
     return (
       <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center text-white gap-4">
@@ -67,13 +66,13 @@ export default function GameBoard({
   const serverPreyPos = prey?.position || 0;
 
   // == LOKÁLNÍ STAV PRO VIZUÁLNÍ POZICE (ZPOŽDĚNÉ) ==
-  // Figurky na mapě se budou řídit tímto, ne přímo props
   const [visualHunterPos, setVisualHunterPos] = useState(serverHunterPos);
   const [visualPreyPos, setVisualPreyPos] = useState(serverPreyPos);
 
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [opponentReady, setOpponentReady] = useState(false);
   const [showReadyButton, setShowReadyButton] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
   
@@ -81,14 +80,32 @@ export default function GameBoard({
   const lastPreyPos = useRef<number>(-1);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Poslouchat na player_ready_update
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReadyUpdate = ({ players: updatedPlayers }: { players: any[] }) => {
+      const opponent = updatedPlayers.find(p => p.role !== myRole);
+      if (opponent) {
+        setOpponentReady(opponent.ready);
+      }
+    };
+
+    socket.on('player_ready_update', handleReadyUpdate);
+
+    return () => {
+      socket.off('player_ready_update', handleReadyUpdate);
+    };
+  }, [socket, myRole]);
+
   // === 1. SYNCHRONIZACE POZIC S EFEKTEM ZPOŽDĚNÍ ===
   useEffect(() => {
-    // Pokud máme výsledek kola (právě proběhlo vyhodnocení), zpozdíme pohyb o 2 sekundy
     if (roundResult) {
+      // Posun figurek 2s PO zobrazení vyhodnocení
       const timer = setTimeout(() => {
         setVisualHunterPos(serverHunterPos);
         setVisualPreyPos(serverPreyPos);
-      }, 2000); // 2000ms = 2 sekundy zpoždění pohybu po vyhodnocení
+      }, 2000);  // 2s po vyhodnocení
       return () => clearTimeout(timer);
     } else {
       // V jiných případech (start hry, reconnect) synchronizujeme hned
@@ -98,9 +115,7 @@ export default function GameBoard({
   }, [serverHunterPos, serverPreyPos, roundResult]);
 
   // === 2. AUDIO EFEKTY POHYBU ===
-  // Přehráváme zvuky až ve chvíli, kdy se "vizuálně" pohne figurka
   useEffect(() => {
-    // 🆕 STEP ZVUK - při jakémkoliv pohybu
     const hunterMoved = visualHunterPos !== lastHunterPos.current && lastHunterPos.current !== -1;
     const preyMoved = visualPreyPos !== lastPreyPos.current && lastPreyPos.current !== -1;
     
@@ -108,26 +123,22 @@ export default function GameBoard({
       playSfx('step.mp3');
     }
     
-    // Detekce pohybu lovce (nebezpečí) - přehraje se PO step.mp3
     if (visualHunterPos === visualPreyPos - 1 && visualHunterPos !== lastHunterPos.current && visualHunterPos > 0) {
-        // Malé zpoždění aby se step.mp3 stihl přehrát první
-        setTimeout(() => playSfx('danger.mp3'), 300);
+      setTimeout(() => playSfx('danger.mp3'), 300);
     }
-    // Detekce blížícího se cíle pro štvance
     if (visualPreyPos === 7 && visualPreyPos !== lastPreyPos.current) {
-          setTimeout(() => playSfx('hope.mp3'), 300);
+      setTimeout(() => playSfx('hope.mp3'), 300);
     }
     
-    // Aktualizace referencí pro příští porovnání
     lastHunterPos.current = visualHunterPos;
     lastPreyPos.current = visualPreyPos;
   }, [visualHunterPos, visualPreyPos, playSfx]);
 
-  // === OSTATNÍ LOGIKA (Audio tick-tack, GameOver atd.) ===
+  // === AUDIO TICK-TACK ===
   useEffect(() => {
     if (currentQuestion && !hasAnswered && !roundResult && !gameOver && timeLeft > 0 && timeLeft <= 10) {
       const timeoutId = setTimeout(() => {
-          playTickTack();
+        playTickTack();
       }, 500); 
       return () => clearTimeout(timeoutId);
     } else {
@@ -165,11 +176,13 @@ export default function GameBoard({
     if (roundResult) {
       if (timerRef.current) clearInterval(timerRef.current);
       setShowReadyButton(false);
-      const timeout = setTimeout(() => setShowReadyButton(true), 3000);
+      // 🆕 Prodloužit čekání na zobrazení tlačítka (po posunu figurek)
+      const timeout = setTimeout(() => setShowReadyButton(true), 3000);  // 3s po vyhodnocení (1s po posunu)
       return () => clearTimeout(timeout);
     } else {
       setShowReadyButton(false);
       setIsReady(false);
+      setOpponentReady(false);
       setSelectedAnswer(null);
       setHasAnswered(false);
     }
@@ -185,13 +198,14 @@ export default function GameBoard({
   };
 
   const handleReadyClick = () => {
+    if (isReady) return;
     setIsReady(true);
     if (socket) {
-      socket.emit('playerReady', { code: roomCode });
+      socket.emit('player_ready', { code: roomCode });
+      console.log('📤 Odesláno player_ready');
     }
   };
 
-  // hunter a prey už jsou definovány výše
   const fields = Array.from({ length: 9 }, (_, i) => i);
   
   const getTimerColor = () => {
@@ -208,55 +222,56 @@ export default function GameBoard({
     );
   }
 
-  // === DESIGN (BEZE ZMĚN) ===
   return (
-    <div className="fixed inset-0 w-full h-[100dvh] bg-slate-900 flex flex-col text-slate-200 font-sans overflow-hidden">
+    <div className="fixed inset-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col md:flex-row overflow-hidden">
       
-      {/* HEADER */}
-      <div className={`shrink-0 h-10 md:h-16 flex items-center justify-between px-3 md:px-6 border-b border-white/10 shadow-sm z-20 ${
-          myRole === 'hunter' ? 'bg-red-950' : 'bg-green-950'
-      }`}>
-         <div className="flex items-center gap-2 md:gap-4">
-            <span className="text-lg md:text-3xl filter drop-shadow">{myRole === 'hunter' ? '👹' : '🏃'}</span>
-            <span className={`font-black text-xs md:text-xl uppercase tracking-widest ${
-                 myRole === 'hunter' ? 'text-red-400' : 'text-green-400'
-            }`}>
-              {myRole === 'hunter' ? 'LOVEC' : 'ŠTVANEC'}
-            </span>
-         </div>
-         <div className="flex items-center gap-2 md:gap-4">
-            {/* KÓD LOBBY */}
-            <div className="bg-black/30 px-2 py-0.5 md:px-3 md:py-1 rounded-full">
-               <span className="text-[9px] md:text-xs font-mono text-slate-400">
-                  HRA <span className="text-cyan-400 font-bold">{roomCode}</span>
-               </span>
-            </div>
-            {/* REŽIM */}
-            <div className="flex items-center gap-1.5 opacity-60 bg-black/20 px-2 py-0.5 md:px-4 md:py-1.5 rounded-full">
-               {gameMode === 'kid' ? <Baby size={12} className="md:w-5 md:h-5"/> : <Brain size={12} className="md:w-5 md:h-5"/>}
-               <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider">
-                   {gameMode === 'kid' ? 'JUNIOR' : 'DOSPĚLÝ'}
-               </span>
-            </div>
-         </div>
+      {/* Hlavička s rolí - mobilní verze - KOMPAKTNÍ */}
+      <div className="shrink-0 bg-slate-800/90 p-1.5 shadow-lg z-20 flex justify-between items-center md:hidden border-b border-slate-700">
+        <div className={`flex items-center gap-1 px-2 py-1 rounded border ${myRole === 'hunter' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'bg-green-500/20 border-green-500/50 text-green-400'}`}>
+          {myRole === 'hunter' ? <Target size={14} /> : <User size={14} />}
+          <span className="text-[10px] font-bold uppercase">{myRole === 'hunter' ? 'Lovec' : 'Štvanec'}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] text-cyan-400 font-mono">{roomCode}</span>
+          <div className="flex items-center gap-0.5 px-1 py-0.5 bg-slate-700/50 rounded text-[9px]">
+            {gameMode === 'kid' ? <Baby size={10} className="text-pink-400"/> : <Brain size={10} className="text-cyan-400"/>}
+            <span className="text-slate-400">{gameMode === 'kid' ? 'Jr' : 'Dosp'}</span>
+          </div>
+        </div>
       </div>
 
-      {/* HLAVNÍ KONTEJNER */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-
-        {/* === MAPA === */}
-        <div className="flex-1 overflow-y-auto bg-slate-900 min-h-0 p-2 md:p-8 relative [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+        
+        {/* === HERNÍ PLÁN === */}
+        <div className="flex-1 flex flex-col min-h-0 bg-slate-800/30 md:p-8 p-3 overflow-y-auto md:overflow-visible relative">
             
-            <div className="max-w-xl mx-auto space-y-1.5 md:space-y-4 pb-2">
-                {fields.map((fieldNum) => {
-                // ZDE JSME POUŽILI VIZUÁLNÍ (ZPOŽDĚNÉ) POZICE
+            {/* Desktop: Hlavička s rolí - ZMENŠENÁ */}
+            <div className="hidden md:flex justify-between items-center mb-4">
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${myRole === 'hunter' ? 'bg-red-500/20 border-red-500/70 text-red-400' : 'bg-green-500/20 border-green-500/70 text-green-400'}`}>
+                  {myRole === 'hunter' ? <Target size={18} /> : <User size={18} />}
+                  <span className="text-sm font-bold uppercase">{myRole === 'hunter' ? 'Jsi Lovec' : 'Jsi Štvanec'}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Kód místnosti */}
+                  <span className="text-slate-400 text-xs font-mono">
+                    Kód: <span className="text-cyan-400 font-bold">{roomCode}</span>
+                  </span>
+                  {/* Režim */}
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-700/50 rounded border border-slate-600">
+                    {gameMode === 'kid' ? <Baby size={14} className="text-pink-400"/> : <Brain size={14} className="text-cyan-400"/>}
+                    <span className="text-slate-300 text-xs font-semibold">{gameMode === 'kid' ? 'Junior' : 'Dospělí'}</span>
+                  </div>
+                </div>
+            </div>
+            
+            {/* Mapa polí */}
+            <div className="flex flex-col gap-1.5 md:gap-4 flex-1 justify-center">
+                {[...fields].reverse().map((fieldNum) => {
                 const isHunterHere = visualHunterPos === fieldNum;
                 const isPreyHere = visualPreyPos === fieldNum;
                 const isStart = fieldNum === 0;
                 const isFinish = fieldNum === 8;
                 
-                // Určení, zda je pole na trase (pro barvení historie)
-                // Používáme také vizuální pozice, aby se "had" táhl správně
                 const isHunterTrail = visualHunterPos > 0 && fieldNum < visualHunterPos && fieldNum > 0;
                 const isPreyPath = visualPreyPos > 0 && fieldNum > visualPreyPos && fieldNum < 8;
 
@@ -264,10 +279,10 @@ export default function GameBoard({
                 if (isStart) bgStyle = 'bg-red-500/10 border-red-500/20';
                 else if (isFinish) bgStyle = 'bg-green-500/10 border-green-500/20';
                 
-                if (isHunterTrail) bgStyle = 'bg-red-900/20 border-red-800/30'; // Stopa lovce
+                if (isHunterTrail) bgStyle = 'bg-red-900/20 border-red-800/30';
                 if (isHunterHere) bgStyle = 'bg-gradient-to-r from-red-900/50 to-slate-800 border-red-500/40';
                 
-                if (isPreyPath) bgStyle = 'bg-green-900/20 border-green-800/30'; // Cesta štvance
+                if (isPreyPath) bgStyle = 'bg-green-900/20 border-green-800/30';
                 if (isPreyHere) bgStyle = 'bg-gradient-to-r from-green-900/50 to-slate-800 border-green-500/40';
 
                 return (
@@ -293,7 +308,7 @@ export default function GameBoard({
                                     <span className="text-[10px] md:text-sm font-bold uppercase">Štvanec</span>
                                 </div>
                             )}
-                             {isFinish && !isPreyHere && <Flag className="text-slate-700 w-4 h-4 md:w-6 md:h-6"/>}
+                            {isFinish && !isPreyHere && <Flag className="text-slate-700 w-4 h-4 md:w-6 md:h-6"/>}
                         </div>
                     </div>
                 );
@@ -337,7 +352,7 @@ export default function GameBoard({
                         
                         {/* Timer Line */}
                         <div className="w-full h-1.5 md:h-3 bg-slate-700 rounded-full overflow-hidden">
-                             <div className={`h-full transition-all duration-1000 linear ${
+                            <div className={`h-full transition-all duration-1000 linear ${
                                 timeLeft > 10 ? 'bg-cyan-400' : timeLeft > 5 ? 'bg-yellow-400' : 'bg-red-500'
                             }`} style={{ width: `${(timeLeft / 20) * 100}%` }} />
                         </div>
@@ -348,7 +363,7 @@ export default function GameBoard({
                                 <h3 className="text-white font-bold text-sm md:text-2xl leading-snug max-h-[60px] md:max-h-none overflow-y-auto md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                                     {currentQuestion.question}
                                 </h3>
-                                {/* 🆕 Badge zdroje - minimální vizuální prvek */}
+                                {/* Badge zdroje */}
                                 <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded ${
                                     currentQuestion._fromLLM 
                                         ? 'bg-green-900/50 text-green-400' 
@@ -395,11 +410,38 @@ export default function GameBoard({
                             })}
                         </div>
 
-                        {/* Tlačítko Další kolo */}
-                        {roundResult && showReadyButton && (
-                            <button onClick={handleReadyClick} disabled={isReady} className="mt-2 w-full py-3 md:py-5 bg-orange-500 text-white font-bold uppercase rounded-lg shadow-lg animate-bounce border-t border-white/20 tracking-widest text-xs md:text-xl">
-                                {isReady ? 'Čekám...' : 'PŘIPRAVENI NA DALŠÍ OTÁZKU?'}
+                        {/* 🆕 BUG11 FIX: Tlačítko Další kolo - SKRÝT při gameOver */}
+                        {roundResult && showReadyButton && !gameOver && (
+                          <div className="space-y-2 mt-2">
+                            <button 
+                              onClick={handleReadyClick} 
+                              disabled={isReady} 
+                              className={`w-full py-3 md:py-5 font-bold uppercase rounded-lg shadow-lg border-t border-white/20 tracking-widest text-xs md:text-xl transition-all ${
+                                isReady 
+                                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                  : 'bg-orange-500 text-white animate-bounce'
+                              }`}
+                            >
+                              {isReady ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <Loader className="w-5 h-5 animate-spin" />
+                                  ČEKÁM NA SOUPEŘE...
+                                </span>
+                              ) : (
+                                'PŘIPRAVENI NA DALŠÍ OTÁZKU?'
+                              )}
                             </button>
+                            
+                            {/* Indikátor stavu připravenosti */}
+                            <div className="flex justify-center gap-4 text-xs">
+                              <span className={`px-3 py-1 rounded-full ${isReady ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                                Ty: {isReady ? '✓ Připraven' : 'Čekám'}
+                              </span>
+                              <span className={`px-3 py-1 rounded-full ${opponentReady ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                                Soupeř: {opponentReady ? '✓ Připraven' : 'Čekám'}
+                              </span>
+                            </div>
+                          </div>
                         )}
                     </div>
                 )}

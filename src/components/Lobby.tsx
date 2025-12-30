@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { UserPlus, Users, HelpCircle } from 'lucide-react';
+import { UserPlus, Users, HelpCircle, Eye, Ticket } from 'lucide-react';
+
+// Stripe Payment Link - cena 139 Kč/měsíc
+const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/bJebJ15E3bXs7DG8l25wI01';
 
 interface LobbyProps {
   onCreateGame: () => void;
@@ -139,6 +142,32 @@ export default function Lobby({ onCreateGame, onJoinGame }: LobbyProps) {
                 Vstoupit
               </button>
             </div>
+          </div>
+        )}
+
+        {/* 🆕 Divácká místnost nabídka */}
+        {!showJoinInput && (
+          <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 rounded-2xl p-4 border border-amber-500/30 space-y-3">
+            <div className="flex items-center gap-2 justify-center text-amber-400">
+              <Eye size={18} />
+              <span className="font-bold uppercase tracking-wide text-sm">Divácká místnost</span>
+            </div>
+            <p className="text-center text-slate-400 text-xs">
+              Chcete, aby diváci mohli sledovat vaši hru na projektoru nebo TV?
+            </p>
+            <a
+              href={STRIPE_CHECKOUT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-lg shadow-amber-500/20 mx-auto text-sm"
+            >
+              <Ticket size={16} />
+              <span>KOUPIT VSTUPENKU</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">139 Kč/měsíc</span>
+            </a>
+            <p className="text-center text-slate-500 text-[10px]">
+              Jednorázová platba, bez automatického obnovování
+            </p>
           </div>
         )}
       </div>

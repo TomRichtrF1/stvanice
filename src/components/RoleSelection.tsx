@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Target, User, Eye, Ticket, Loader } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Target, User, Eye, Ticket, Loader, Check, X } from 'lucide-react';
+import { useSocket } from '../contexts/SocketContext';
 
 interface RoleSelectionProps {
   onSelectRole: (role: 'hunter' | 'prey') => void;
   selectedRole: string | null;
   rolesLocked: boolean;
-  ageGroup: string;  // 🆕 Místo gameMode
+  ageGroup: string;
   roomCode: string;
 }
 
@@ -27,7 +28,38 @@ export default function RoleSelection({
   ageGroup,
   roomCode
 }: RoleSelectionProps) {
+  const { socket } = useSocket();
   const [isLoading, setIsLoading] = useState(false);
+  const [roleTakenError, setRoleTakenError] = useState<string | null>(null);
+  
+  // 🆕 Sledování obsazených rolí druhým hráčem
+  const [opponentRole, setOpponentRole] = useState<'hunter' | 'prey' | null>(null);
+
+  // 🆕 Poslouchat na role_taken event
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRoleTaken = ({ role, message }: { role: string; message: string }) => {
+      setRoleTakenError(message);
+      setTimeout(() => setRoleTakenError(null), 3000);
+    };
+
+    const handleRolesUpdated = ({ players }: { players: any[] }) => {
+      // Najít roli protihráče
+      const opponent = players.find((p: any) => p.id !== socket.id);
+      if (opponent && opponent.role) {
+        setOpponentRole(opponent.role);
+      }
+    };
+
+    socket.on('role_taken', handleRoleTaken);
+    socket.on('roles_updated', handleRolesUpdated);
+
+    return () => {
+      socket.off('role_taken', handleRoleTaken);
+      socket.off('roles_updated', handleRolesUpdated);
+    };
+  }, [socket]);
 
   // 🎫 Handler pro nákup vstupenky
   const handleBuyTicket = async () => {
@@ -73,17 +105,59 @@ export default function RoleSelection({
   
   const colors = colorClasses[categoryInfo.color as keyof typeof colorClasses] || colorClasses.blue;
 
+  // 🆕 Logika pro stav tlačítek
+  const isHunterTakenByOpponent = opponentRole === 'hunter' && selectedRole !== 'hunter';
+  const isPreyTakenByOpponent = opponentRole === 'prey' && selectedRole !== 'prey';
+  
+  const hunterDisabled = rolesLocked && selectedRole !== 'hunter';
+  const preyDisabled = rolesLocked && selectedRole !== 'prey';
+
+  // 🆕 Funkce pro získání stylů tlačítka
+  const getButtonStyle = (role: 'hunter' | 'prey') => {
+    const isSelected = selectedRole === role;
+    const isTakenByOpponent = role === 'hunter' ? isHunterTakenByOpponent : isPreyTakenByOpponent;
+    const isDisabled = role === 'hunter' ? hunterDisabled : preyDisabled;
+    
+    const baseColors = role === 'hunter' 
+      ? { gradient: 'from-red-600 to-rose-600', hover: 'hover:from-red-500 hover:to-rose-500', shadow: 'shadow-red-500/50' }
+      : { gradient: 'from-green-600 to-emerald-600', hover: 'hover:from-green-500 hover:to-emerald-500', shadow: 'shadow-green-500/50' };
+
+    if (isSelected) {
+      return `bg-gradient-to-r ${baseColors.gradient} text-white ${baseColors.shadow} scale-105 ring-4 ring-white/30`;
+    }
+    
+    if (isTakenByOpponent) {
+      return 'bg-slate-700/50 text-slate-500 cursor-not-allowed border-2 border-slate-600';
+    }
+    
+    if (isDisabled) {
+      return 'bg-slate-700 text-slate-500 cursor-not-allowed';
+    }
+    
+    return `bg-gradient-to-r ${baseColors.gradient} ${baseColors.hover} text-white ${baseColors.shadow} hover:scale-105`;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col items-center justify-start p-4 overflow-y-auto">
       <div className="w-full max-w-md space-y-5 animate-fade-in py-8">
         
+        {/* 🆕 Error toast pro obsazenou roli */}
+        {roleTakenError && (
+          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-slide-down">
+            <div className="bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2">
+              <X size={20} />
+              <span className="font-semibold">{roleTakenError}</span>
+            </div>
+          </div>
+        )}
+
         {/* Hlavička */}
         <div className="text-center space-y-2">
           <h2 className="text-3xl font-bold text-white">
             Vyber si roli
           </h2>
           <p className="text-slate-400">
-            {rolesLocked ? 'Tvoje role byla určena' : 'Kdo klikne první, získá roli'}
+            {rolesLocked ? 'Role byly přiřazeny!' : 'Kdo klikne první, získá roli'}
           </p>
         </div>
 
@@ -105,54 +179,91 @@ export default function RoleSelection({
 
         {/* Výběr role */}
         <div className="space-y-4">
+          {/* LOVEC */}
           <button
-            onClick={() => onSelectRole('hunter')}
-            disabled={rolesLocked && selectedRole !== 'hunter'}
-            className={`w-full font-bold py-8 px-8 rounded-2xl text-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-4 ${
-              selectedRole === 'hunter'
-                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-red-500/50 scale-105'
-                : rolesLocked
-                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-red-500/50 hover:scale-105'
-            }`}
+            onClick={() => !isHunterTakenByOpponent && onSelectRole('hunter')}
+            disabled={hunterDisabled || isHunterTakenByOpponent}
+            className={`w-full font-bold py-8 px-8 rounded-2xl text-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-4 relative ${getButtonStyle('hunter')}`}
           >
-            <Target size={40} />
+            {/* 🆕 Badge pro obsazenou roli */}
+            {isHunterTakenByOpponent && (
+              <div className="absolute top-2 right-2 bg-slate-600 text-slate-300 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                <User size={12} />
+                <span>Obsazeno</span>
+              </div>
+            )}
+            
+            {/* 🆕 Badge pro vybranou roli */}
+            {selectedRole === 'hunter' && (
+              <div className="absolute top-2 right-2 bg-white/20 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                <Check size={12} />
+                <span>Tvoje role</span>
+              </div>
+            )}
+
+            <Target size={40} className={isHunterTakenByOpponent ? 'opacity-50' : ''} />
             <div className="text-left">
               <div className="flex items-center gap-2">
-                <span className="text-3xl">👹</span>
+                <span className="text-3xl">{isHunterTakenByOpponent ? '🔒' : '👹'}</span>
                 <span>JÁ JSEM LOVEC</span>
               </div>
-              <p className="text-sm opacity-80 font-normal">Chytám Štvance</p>
+              <p className="text-sm opacity-80 font-normal">
+                {isHunterTakenByOpponent ? 'Soupeř vybral tuto roli' : 'Chytám Štvance'}
+              </p>
             </div>
           </button>
 
+          {/* ŠTVANEC */}
           <button
-            onClick={() => onSelectRole('prey')}
-            disabled={rolesLocked && selectedRole !== 'prey'}
-            className={`w-full font-bold py-8 px-8 rounded-2xl text-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-4 ${
-              selectedRole === 'prey'
-                ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-green-500/50 scale-105'
-                : rolesLocked
-                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white shadow-green-500/50 hover:scale-105'
-            }`}
+            onClick={() => !isPreyTakenByOpponent && onSelectRole('prey')}
+            disabled={preyDisabled || isPreyTakenByOpponent}
+            className={`w-full font-bold py-8 px-8 rounded-2xl text-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-4 relative ${getButtonStyle('prey')}`}
           >
-            <User size={40} />
+            {/* 🆕 Badge pro obsazenou roli */}
+            {isPreyTakenByOpponent && (
+              <div className="absolute top-2 right-2 bg-slate-600 text-slate-300 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                <User size={12} />
+                <span>Obsazeno</span>
+              </div>
+            )}
+            
+            {/* 🆕 Badge pro vybranou roli */}
+            {selectedRole === 'prey' && (
+              <div className="absolute top-2 right-2 bg-white/20 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                <Check size={12} />
+                <span>Tvoje role</span>
+              </div>
+            )}
+
+            <User size={40} className={isPreyTakenByOpponent ? 'opacity-50' : ''} />
             <div className="text-left">
               <div className="flex items-center gap-2">
-                <span className="text-3xl">🏃</span>
+                <span className="text-3xl">{isPreyTakenByOpponent ? '🔒' : '🏃'}</span>
                 <span>JÁ JSEM ŠTVANEC</span>
               </div>
-              <p className="text-sm opacity-80 font-normal">Utíkám před Lovcem</p>
+              <p className="text-sm opacity-80 font-normal">
+                {isPreyTakenByOpponent ? 'Soupeř vybral tuto roli' : 'Utíkám před Lovcem'}
+              </p>
             </div>
           </button>
         </div>
 
         {/* Status */}
         {selectedRole && (
-          <div className="bg-slate-800 p-4 rounded-xl border-2 border-cyan-500/50 text-center animate-slide-up">
-            <p className="text-cyan-400 font-semibold">
-              {rolesLocked ? 'Připravte se na hru!' : 'Čekám na druhého hráče...'}
+          <div className={`p-4 rounded-xl border-2 text-center animate-slide-up ${
+            rolesLocked 
+              ? 'bg-green-900/30 border-green-500/50' 
+              : 'bg-slate-800 border-cyan-500/50'
+          }`}>
+            <p className={rolesLocked ? 'text-green-400 font-semibold' : 'text-cyan-400 font-semibold'}>
+              {rolesLocked ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Check size={20} />
+                  Připravte se na hru!
+                </span>
+              ) : (
+                'Čekám na druhého hráče...'
+              )}
             </p>
           </div>
         )}

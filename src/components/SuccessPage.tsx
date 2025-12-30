@@ -11,7 +11,7 @@ export default function SuccessPage() {
 
   useEffect(() => {
     const fetchCode = async () => {
-      // Získej session_id z URL (bez react-router-dom)
+      // Získej session_id z URL
       const urlParams = new URLSearchParams(window.location.search);
       const sessionId = urlParams.get('session_id');
 
@@ -175,7 +175,7 @@ export default function SuccessPage() {
         {!confirmed ? (
           <div className="bg-slate-800/80 rounded-2xl p-6 border border-amber-500/30">
             <p className="text-amber-300 text-center font-bold mb-4">
-              MÁŠ KÓD POZNAMENÁN?
+              MÁŠ KÓD POZNAMENANÝ?
             </p>
             <button
               onClick={handleConfirm}

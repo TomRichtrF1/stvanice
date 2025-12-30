@@ -11,10 +11,10 @@ import GameBoard from './components/GameBoard';
 import SpectatorView from './components/SpectatorView';
 import FAQ from './components/FAQ';
 import Success from './components/SuccessPage';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Home, RefreshCw } from 'lucide-react';
 
 /**
- * 🎮 FLOW v3.2: OPRAVA WHITE SCREEN
+ * 🎮 FLOW v4.1: OPRAVY BUG10-15
  */
 
 type GamePhase = 
@@ -69,7 +69,7 @@ function App() {
   const [ageGroup, setAgeGroup] = useState<string>('adult');
   const [gameMode, setGameMode] = useState<'adult' | 'kid'>('adult');
   const [countdown, setCountdown] = useState<number>(35);
-  const [aiProgress, setAiProgress] = useState<AIProgress>({ generated: 0, target: 8 });
+  const [aiProgress, setAiProgress] = useState<AIProgress>({ generated: 0, target: 5 });
   const [isRematch, setIsRematch] = useState<boolean>(false);
   
   const [roomCode, setRoomCode] = useState<string>('');
@@ -84,6 +84,9 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [disconnected, setDisconnected] = useState(false);
   const [isResyncing, setIsResyncing] = useState(false);
+  
+  // 🆕 BUG15: Stav pro opuštění hry soupeřem
+  const [playerLeft, setPlayerLeft] = useState<{ reason: string; leftPlayer: string } | null>(null);
 
   // === AUDIO LOGIKA ===
   useEffect(() => {
@@ -172,11 +175,13 @@ function App() {
       setGameMode(group === 'adult' ? 'adult' : 'kid');
       setPlayersCount(1);
       setIsRematch(false);
+      setPlayerLeft(null);
       setPhase(initialPhase || 'waiting_for_player');
     });
 
     socket.on('game_joined', ({ code, ageGroup: group, phase: currentPhase }) => {
       setRoomCode(code);
+      setPlayerLeft(null);
       if (group) {
         setAgeGroup(group);
         setGameMode(group === 'adult' ? 'adult' : 'kid');
@@ -190,9 +195,12 @@ function App() {
       setPlayersCount(count);
     });
 
-    socket.on('countdown_started', ({ countdown: initialCountdown, ageGroup: group }) => {
+    socket.on('countdown_started', ({ countdown: initialCountdown, ageGroup: group, aiProgress: progress }) => {
       setCountdown(initialCountdown);
       setPhase('countdown');
+      if (progress) {
+        setAiProgress(progress);
+      }
     });
     
     socket.on('countdown_tick', ({ remaining, aiProgress: progress, playersCount: count }) => {
@@ -204,9 +212,16 @@ function App() {
     socket.on('countdown_complete', () => {});
 
     socket.on('rematch_started', ({ isRematch: rematch }) => {
+      console.log('🔄 Rematch started event přijat');
       setIsRematch(rematch);
       setMyRole(null);
       setRolesLocked(false);
+      setGameOver(false);
+      setWinner(null);
+      setRoundResult(null);
+      setCurrentQuestion(null);
+      setPlayers([]);
+      setPlayerLeft(null);
     });
 
     socket.on('start_resolution', () => {
@@ -221,6 +236,7 @@ function App() {
     });
 
     socket.on('phase_change', ({ phase: newPhase }) => {
+      console.log(`📍 Phase change: ${newPhase}`);
       setPhase(newPhase);
       if (newPhase === 'role_selection' || newPhase === 'headstart_selection') {
         setGameOver(false); 
@@ -275,6 +291,16 @@ function App() {
 
     socket.on('player_connection_unstable', ({ gracePeriod }) => {
       console.log(`⚠️ Soupeř má nestabilní připojení`);
+    });
+
+    // 🆕 BUG15: Handler pro opuštění hry soupeřem
+    socket.on('player_left_game', ({ reason, leftPlayer }) => {
+      console.log(`👋 Soupeř opustil hru: ${reason}`);
+      setPlayerLeft({ reason, leftPlayer });
+    });
+
+    socket.on('player_ready_update', ({ players: updatedPlayers }) => {
+      console.log('📤 player_ready_update:', updatedPlayers);
     });
 
     socket.on('game_state_sync', (state) => {
@@ -336,31 +362,27 @@ function App() {
       socket.off('game_state_sync');
       socket.off('rejoin_failed');
       socket.off('player_connection_restored');
+      socket.off('player_ready_update');
+      socket.off('player_left_game');
     };
   }, [socket]);
 
-  // VISIBILITY CHANGE - OPRAVENO PROTI WHITE SCREEN
+  // 🆕 BUG15: VISIBILITY CHANGE - 60s timeout při přepnutí okna
   useEffect(() => {
     if (!socket || !roomCode) return;
     
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        socket.emit('player_paused', { code: roomCode });
+        console.log('👁️ Okno skryto - odesílám player_visibility_hidden');
+        socket.emit('player_visibility_hidden', { code: roomCode });
       } else {
-        console.log('👁️ Uživatel se vrátil...');
+        console.log('👁️ Okno viditelné - odesílám player_visibility_visible');
+        socket.emit('player_visibility_visible', { code: roomCode });
         
-        // 🆕 OPRAVA: Kontrola, zda máme stejné ID
+        // Také požádat o resync stavu
         const lastSocketId = sessionStorage.getItem('last_socket_id');
-        
         if (socket.id === lastSocketId) {
-            // Jsme to my, spojení nepadlo
-            console.log('✅ ID sedí, žádám rychlý resync...');
-            socket.emit('player_resumed', { code: roomCode });
-        } else {
-            // ID je jiné, čekáme na REJOIN z handleConnect
-            // NEPOSÍLÁME player_resumed, aby server nevrátil null roli
-            console.log('🛑 ID se liší, blokuji player_resumed a čekám na rejoin...');
-            setIsResyncing(true);
+          socket.emit('player_resumed', { code: roomCode });
         }
       }
     };
@@ -369,15 +391,14 @@ function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [socket, roomCode]);
 
-  // 🆕 DETEKCE RELOADU/ZAVŘENÍ - úmyslný odchod
+  // 🆕 BUG15: DETEKCE RELOADU/ZAVŘENÍ - okamžité oznámení
   useEffect(() => {
+    if (!socket || !roomCode) return;
+    
     const handleBeforeUnload = () => {
-      // Informovat server o úmyslném odchodu
-      if (socket && roomCode) {
-        console.log('👋 Reload/zavření detekováno, odesílám player_leaving...');
-        socket.emit('player_leaving', { code: roomCode });
-      }
-      // Vyčistit session - při reloadu nechceme rejoin
+      console.log('👋 Reload/zavření detekováno, odesílám player_leaving...');
+      socket.emit('player_leaving', { code: roomCode });
+      
       sessionStorage.removeItem('last_socket_id');
       sessionStorage.removeItem('last_room_code');
     };
@@ -421,7 +442,24 @@ function App() {
   };
   
   const handlePlayAgain = () => {
+    console.log('🔄 Odesílám play_again request');
     socket?.emit('play_again', { code: roomCode });
+  };
+
+  // 🆕 BUG15: Handler pro návrat na začátek po opuštění hry soupeřem
+  const handleReturnToLobby = () => {
+    setPlayerLeft(null);
+    setPhase('lobby');
+    setRoomCode('');
+    setMyRole(null);
+    setPlayers([]);
+    setCurrentQuestion(null);
+    setGameOver(false);
+    setWinner(null);
+    setRoundResult(null);
+    setIsRematch(false);
+    sessionStorage.removeItem('last_socket_id');
+    sessionStorage.removeItem('last_room_code');
   };
 
   // === LOADING STATES ===
@@ -447,18 +485,41 @@ function App() {
     );
   }
 
+  // 🆕 BUG15: Obrazovka když soupeř opustil hru
+  if (playerLeft) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-6 text-center animate-fade-in">
+          <AlertCircle className="w-20 h-20 text-yellow-500 mx-auto" />
+          <h2 className="text-3xl font-bold text-white">Soupeř opustil hru</h2>
+          <p className="text-slate-400">{playerLeft.reason}</p>
+          <div className="space-y-3">
+            <button 
+              onClick={handleReturnToLobby}
+              className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl shadow-lg shadow-cyan-500/50 flex items-center justify-center gap-3"
+            >
+              <Home size={24} />
+              ZALOŽIT NOVOU HRU
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (disconnected) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-6 text-center animate-fade-in">
           <AlertCircle className="w-20 h-20 text-red-500 mx-auto" />
-          <h2 className="text-3xl font-bold text-white">Soupeř se odpojil</h2>
+          <h2 className="text-3xl font-bold text-white">Spojení přerušeno</h2>
           <p className="text-slate-400">Hra byla ukončena</p>
           <button 
             onClick={() => window.location.reload()} 
-            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl shadow-lg shadow-cyan-500/50"
+            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl shadow-lg shadow-cyan-500/50 flex items-center justify-center gap-3 mx-auto"
           >
-            ZPĚT DO LOBBY
+            <RefreshCw size={24} />
+            ZKUSIT ZNOVU
           </button>
         </div>
       </div>
@@ -520,7 +581,7 @@ function App() {
         />
       )}
       
-      {/* GAME BOARD - S POJISTKOU PROTI BÍLÉ OBRAZOVCE */}
+      {/* GAME BOARD */}
       {(phase === 'playing' || phase === 'finished') && (
         myRole ? (
           <GameBoard 
