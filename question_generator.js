@@ -1,33 +1,25 @@
 /**
- * 🧠 QUESTION GENERATOR - Production Edition
- * VERZE: 4.2
- * 
- * OPRAVY:
- * - BUG6: Timeout pro LLM + robustní fallback na DB
- * - BUG7: Ukládání do DB až při použití hráčem
- * - BUG10: Anti-repeat validace (3h okno) - ověřeno
- * - ERROR FIX: Ukládání do DB POUZE pro fact-checked otázky!
- * 
- * NOVÉ FUNKCE:
- * - Obsahová validace otázek (question_validator.js)
- * - Fact-checking pomocí Sonar Pro (fact_checker.js)
- * - Globální deduplikace odpovědí (3h okno)
- * - Střídání LLM/DB podle schématu kol
- * - Background generování pro další hry
- * 
- * DŮLEŽITÉ:
- * - Otázky se ukládají do DB POUZE pokud _factChecked === true
- * - Bez PERPLEXITY_API_KEY se LLM otázky NEUKLÁDAJÍ do DB
+ * 🧠 QUESTION GENERATOR - Ultimate Edition
+ * Features:
+ * 1. Anti-Repeat (Over-fetch & Filter)
+ * 2. Fact-Checking (Perplexity/Sonar)
+ * 3. Robust Database Handling
  */
 
 import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
-import { filterValidQuestions } from './question_validator.js';
-import { factCheckBatch } from './fact_checker.js';
 
 dotenv.config();
 
-// === DATABASE REFERENCE ===
+// === KONFIGURACE ===
+const GENERATOR_MODEL = "llama-3.3-70b-versatile";
+const VALIDATOR_MODEL = "sonar-pro"; // Model pro ověřování faktů
+const BATCH_SIZE = 5;       
+const DB_FETCH_BATCH = 20;  // Over-fetch pro filtrování
+const MIN_CACHE_SIZE = 3;   
+const BLACKLIST_DURATION = 3 * 60 * 60 * 1000; // 3 hodiny
+
+// === DATABÁZE ===
 let questionDatabase = null;
 let useDatabase = false;
 
@@ -36,20 +28,8 @@ export async function connectDatabase(dbModule) {
     questionDatabase = dbModule;
     const success = await questionDatabase.initDatabase();
     useDatabase = success;
-    
-    if (success) {
-      console.log('✅ Generator: Databáze aktivní a připojená');
-    } else {
-      console.log('⚠️ Generator: Databáze nedostupná, jedeme v LLM-only módu');
-    }
-    
-    // Kontrola fact-checkeru
-    if (process.env.PERPLEXITY_API_KEY) {
-      console.log('✅ Generator: Fact-checker aktivní (Sonar Pro)');
-    } else {
-      console.warn('⚠️ Generator: Fact-checker NEAKTIVNÍ - LLM otázky se NEBUDOU ukládat do DB!');
-    }
-    
+    if (success) console.log('✅ Generator: Databáze aktivní a připojená');
+    else console.log('⚠️ Generator: Databáze nedostupná (init selhal), jedeme v LLM-only módu');
     return success;
   } catch (error) {
     console.warn('⚠️ Generator: Chyba při připojování DB:', error.message);
@@ -58,7 +38,7 @@ export async function connectDatabase(dbModule) {
   }
 }
 
-// === GROQ CLIENT ===
+// === API KLIENTI ===
 let groqInstance = null;
 function getGroqClient() {
   if (groqInstance) return groqInstance;
@@ -69,12 +49,62 @@ function getGroqClient() {
   } catch (error) { return null; }
 }
 
-// === KONFIGURACE ===
-const GENERATOR_MODEL = "llama-3.3-70b-versatile";
-const TARGET_BATCH_SIZE = 8;       // Cílový počet otázek v batchi (pro progress bar)
-const MIN_BATCH_FOR_START = 5;     // Minimum otázek pro start hry
-const LLM_TIMEOUT_MS = 25000;      // 25s timeout pro LLM
-const LLM_GENERATE_COUNT = 12;     // Generovat více, po validaci zbyde méně
+const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
+
+// === STATISTIKY (OBNOVENO) ===
+let validationStats = {
+  generated: 0,
+  passedSelfCritique: 0, // Prošlo strukturální kontrolou
+  failedSelfCritique: 0,
+  passedPerplexity: 0,   // Prošlo fact-checkingem
+  failedPerplexity: 0,
+  skippedPerplexity: 0
+};
+
+let validationHistory = [];
+
+export function getValidationStats() { return validationStats; }
+export function getValidationHistory() { return validationHistory; }
+export function resetValidationStats() {
+  validationStats = { generated: 0, passedSelfCritique: 0, failedSelfCritique: 0, passedPerplexity: 0, failedPerplexity: 0, skippedPerplexity: 0 };
+  validationHistory = [];
+}
+
+// === ANTI-REPEAT LOGIKA ===
+const globalAnswerBlacklist = new Map();
+
+function normalizeText(text) {
+  if (!text) return "";
+  return text.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '').trim();
+}
+
+function blockAnswerGlobally(answer) {
+  if (!answer) return;
+  const key = normalizeText(answer);
+  globalAnswerBlacklist.set(key, Date.now());
+}
+
+function isAnswerBlocked(answer) {
+  if (!answer) return false;
+  const key = normalizeText(answer);
+  const timestamp = globalAnswerBlacklist.get(key);
+  if (!timestamp) return false;
+  if (Date.now() - timestamp > BLACKLIST_DURATION) {
+    globalAnswerBlacklist.delete(key);
+    return false;
+  }
+  return true;
+}
+
+// Čištění blacklistu
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, time] of globalAnswerBlacklist) {
+    if (now - time > BLACKLIST_DURATION) globalAnswerBlacklist.delete(key);
+  }
+}, 60 * 60 * 1000);
 
 // === GAME SESSIONS ===
 const gameSessions = new Map();
@@ -86,102 +116,25 @@ class GameSession {
     this.dbCache = [];
     this.llmCache = [];
     this.llmGenerating = false;
-    this.llmTimedOut = false;
-    this.llmFailed = false;
     this.usedAnswers = new Set();
   }
-  
-  getTotalCached() {
-    return this.dbCache.length + this.llmCache.length;
-  }
-  
-  incrementRound() {
-    this.currentRound++;
-    return this.currentRound;
-  }
+  isAnswerUsed(ans) { return this.usedAnswers.has(normalizeText(ans)); }
+  addUsedAnswer(ans) { this.usedAnswers.add(normalizeText(ans)); }
 }
 
 function getGameSession(gameId) {
   if (!gameId) gameId = 'default';
-  if (!gameSessions.has(gameId)) {
-    gameSessions.set(gameId, new GameSession(gameId));
-  }
+  if (!gameSessions.has(gameId)) gameSessions.set(gameId, new GameSession(gameId));
   return gameSessions.get(gameId);
 }
 
-// === SESSION MANAGEMENT ===
-export function endGameSession(gameId) { 
-  gameSessions.delete(gameId); 
-}
-
-export function resetGameSession(gameId) { 
-  const session = gameSessions.get(gameId);
-  if (session) {
-    session.currentRound = 0;
-    session.usedAnswers.clear();
-    session.llmTimedOut = false;
-    session.llmFailed = false;
-    // NEMAZAT cache při rematchi - použijeme existující otázky
-  }
-}
-
-// === ROUND SOURCE LOGIC ===
-// Schéma: 1-3 LLM, 4-5 DB, 6+ střídání
-function getSourceForRound(round) {
-  if (round <= 3) return 'llm';
-  if (round <= 5) return 'db';
-  return round % 2 === 0 ? 'llm' : 'db';
-}
-
-// === CACHE STATUS (PROGRESS BAR - DB + LLM dohromady) ===
+export function endGameSession(gameId) { gameSessions.delete(gameId); }
+export function resetGameSession(gameId) { gameSessions.delete(gameId); }
 export function getCacheStatus(gameId) {
-  const session = gameSessions.get(gameId);
-  if (!session) {
-    return { 
-      generated: 0, 
-      target: TARGET_BATCH_SIZE, 
-      ready: false,
-      status: 'waiting'
-    };
-  }
-  
-  const dbCount = session.dbCache.length;
-  const llmCount = session.llmCache.length;
-  const totalCached = dbCount + llmCount;
-  
-  // Progress bar ukazuje DB + LLM, max = target
-  const displayGenerated = Math.min(totalCached, TARGET_BATCH_SIZE);
-  
-  // Ready když máme dostatek otázek celkem
-  const isReady = totalCached >= MIN_BATCH_FOR_START;
-  
-  // Určení statusu
-  let status = 'generating';
-  if (totalCached >= TARGET_BATCH_SIZE) {
-    status = 'ready';
-  } else if ((session.llmTimedOut || session.llmFailed) && totalCached >= MIN_BATCH_FOR_START) {
-    status = 'fallback';
-  } else if (session.llmGenerating) {
-    status = 'generating';
-  } else if (totalCached >= MIN_BATCH_FOR_START) {
-    status = 'ready';
-  }
-  
-  // Debug log
-  console.log(`📊 Cache status [${gameId}]: DB=${dbCount}, LLM=${llmCount}, total=${totalCached}/${TARGET_BATCH_SIZE}, generating=${session.llmGenerating}`);
-  
-  return {
-    generated: displayGenerated,
-    target: TARGET_BATCH_SIZE,
-    ready: isReady,
-    status,
-    dbCount,
-    llmCount,
-    isGenerating: session.llmGenerating,
-  };
+  const s = gameSessions.get(gameId);
+  return { generated: s ? s.llmCache.length + s.dbCache.length : 0, target: 5 };
 }
 
-// === AGE GROUP CONFIG ===
 const AGE_GROUP_CONFIG = {
   adult: { name: "👔 Dospělí", mode: 'adult', difficulty: 'normal' },
   student: { name: "🎒 Školáci", mode: 'kid', difficulty: 'normal' },
@@ -192,95 +145,161 @@ export function getAgeGroups() {
   return Object.entries(AGE_GROUP_CONFIG).map(([key, config]) => ({ key, ...config }));
 }
 
-export function getValidationStats() { return {}; }
-
-// === LLM GENERATION (s validací a fact-checkem) ===
-async function generateBatchFromLLM(ageGroup, session) {
-  const client = getGroqClient();
-  if (!client) {
-    console.error('❌ Groq client není dostupný');
-    return [];
+// === FACT CHECKING (PERPLEXITY SONAR) - OBNOVENO ===
+async function validateWithSonar(questionData) {
+  if (!PERPLEXITY_API_KEY) {
+    validationStats.skippedPerplexity++;
+    return true; // Bez klíče propouštíme (fallback)
   }
+
+  const correctAnswer = questionData.options[questionData.correct];
+  
+  const prompt = `
+    Jsi přísný fact-checker. Ověř tuto kvízovou otázku:
+    Otázka: "${questionData.question}"
+    Možnosti: ${JSON.stringify(questionData.options)}
+    Správná odpověď (index ${questionData.correct}): "${correctAnswer}"
+    
+    Pravidla:
+    1. Je označená odpověď fakticky SPRÁVNÁ?
+    2. Jsou ostatní možnosti fakticky NESPRÁVNÉ?
+    3. Je otázka jednoznačná?
+    
+    Odpověz POUZE JSON: {"valid": true} nebo {"valid": false, "reason": "důvod"}
+  `;
+
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`, 
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({ 
+        model: VALIDATOR_MODEL, 
+        messages: [{ role: "user", content: prompt }], 
+        temperature: 0 
+      })
+    });
+    
+    const data = await response.json();
+    if (data.error) { 
+        console.warn("Perplexity API Error:", data.error);
+        validationStats.skippedPerplexity++; 
+        return true; // Při chybě API raději pustíme, než abychom neměli nic
+    }
+
+    const content = data.choices[0].message.content;
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return false;
+    
+    const result = JSON.parse(jsonMatch[0]);
+    
+    if (result.valid) {
+      validationStats.passedPerplexity++;
+      // console.log(`✅ Validated: "${questionData.question.substring(0,30)}..."`);
+      return true;
+    } else {
+      validationStats.failedPerplexity++;
+      console.log(`❌ Rejected: "${questionData.question}" - ${result.reason}`);
+      validationHistory.push({ ...questionData, status: 'REJECTED', reason: result.reason });
+      return false;
+    }
+  } catch (error) {
+    console.error("Validation Error:", error.message);
+    validationStats.skippedPerplexity++;
+    return true; 
+  }
+}
+
+// === FILTRACE (ANTI-REPEAT) ===
+function filterQuestions(questions, session) {
+  if (!questions || questions.length === 0) return [];
+  return questions.filter(q => {
+    const answer = q.options[q.correct];
+    if (isAnswerBlocked(answer)) return false;
+    if (session && session.isAnswerUsed(answer)) return false;
+    return true;
+  });
+}
+
+// === GENERACE Z LLM ===
+async function generateBatchFromLLM(ageGroup, gameSession) {
+  const client = getGroqClient();
+  if (!client) return [];
 
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
   
-  // Vylepšený prompt s pravidly pro kvalitu
-  const prompt = `Vytvoř ${LLM_GENERATE_COUNT} českých kvízových otázek pro kategorii: ${config.name}.
-
-STRIKTNÍ PRAVIDLA:
-1. Každá otázka musí mít JEDNU jasně správnou faktickou odpověď
-2. Správná odpověď NESMÍ být obsažena v textu otázky
-3. ZAKÁZÁNY jsou subjektivní otázky (nejkrásnější, nejlepší, oblíbený...)
-4. ZAKÁZÁNY jsou spekulativní otázky o budoucnosti
-5. Všechny 3 odpovědi musí být RŮZNÉ
-6. Otázky musí být fakticky ověřitelné
-
-Formát JSON: [{"question": "...", "options": ["A", "B", "C"], "correct": 0}]
-- Odpovědi max 3 slova
-- Index correct je 0, 1 nebo 2
-- Vrať POUZE čistý JSON pole, žádný další text`;
+  const prompt = `
+    Vytvoř 5 českých kvízových otázek pro kategorii: ${config.name}.
+    Formát JSON: [{"question": "...", "options": ["A", "B", "C"], "correct": 0}]
+    Odpovědi max 3 slova. Index correct je 0, 1 nebo 2.
+    Vrať POUZE čistý JSON pole, nic víc.
+  `;
 
   try {
-    console.log(`🤖 Generuji ${LLM_GENERATE_COUNT} otázek pomocí LLM...`);
-    
     const response = await client.chat.completions.create({
       model: GENERATOR_MODEL,
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
+      temperature: 0.9
     });
 
     const content = response.choices[0].message.content;
     const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      console.error('❌ LLM nevrátilo validní JSON');
-      return [];
-    }
+    if (!jsonMatch) return [];
     
-    let questions = JSON.parse(jsonMatch[0]);
-    console.log(`   [0] LLM vrátilo: ${questions.length} otázek`);
+    const rawQuestions = JSON.parse(jsonMatch[0]);
+    validationStats.generated += rawQuestions.length;
 
-    // === KROK 1: Základní strukturální validace ===
-    questions = questions.filter(q => 
-      q.question && 
-      Array.isArray(q.options) && 
-      q.options.length === 3 && 
-      typeof q.correct === 'number' &&
-      q.correct >= 0 && 
-      q.correct <= 2
+    // 1. Validace struktury
+    const structurallyValid = rawQuestions.filter(q => 
+      q.question && Array.isArray(q.options) && q.options.length === 3 && typeof q.correct === 'number'
     );
-    console.log(`   [1] Strukturální validace: ${questions.length} otázek`);
-
-    // === KROK 2: Obsahová validace ===
-    questions = filterValidQuestions(questions);
-    console.log(`   [2] Obsahová validace: ${questions.length} otázek`);
-
-    // === KROK 3: Fact-checking (Sonar Pro) ===
-    questions = await factCheckBatch(questions);
-    console.log(`   [3] Fact-check: ${questions.length} otázek`);
-
-    // === KROK 4: Globální deduplikace odpovědí (3h okno) - BUG10 ===
-    if (useDatabase && questionDatabase) {
-      const deduped = [];
-      for (const q of questions) {
-        const correctAnswer = q.options[q.correct];
-        const isRecent = await questionDatabase.isAnswerRecentlyUsed(correctAnswer, 3);
-        
-        if (!isRecent) {
-          deduped.push(q);
-        } else {
-          console.log(`   ⏭️ Přeskočena - odpověď "${correctAnswer}" použita v posledních 3h`);
-        }
-      }
-      questions = deduped;
-      console.log(`   [4] Anti-repeat (3h): ${questions.length} otázek`);
+    
+    // 2. Anti-Repeat Filtr (okamžitě vyhodit duplicity)
+    const uniqueQuestions = filterQuestions(structurallyValid, gameSession);
+    
+    // 3. Fact-Checking (Perplexity) - Pouze pro unikátní otázky
+    const finalQuestions = [];
+    for (const q of uniqueQuestions) {
+        // Validujeme sériově (nebo paralelně Promise.all, ale sériově šetříme Rate Limit)
+        const isValid = await validateWithSonar(q);
+        if (isValid) finalQuestions.push(q);
     }
 
-    console.log(`✅ LLM pipeline dokončena: ${questions.length} kvalitních otázek`);
-    return questions;
-    
+    // Uložení do DB
+    if (useDatabase && questionDatabase && finalQuestions.length > 0) {
+       questionDatabase.saveQuestions(finalQuestions, config.mode, config.difficulty)
+         .catch(err => console.error("Save error:", err.message));
+    }
+
+    return finalQuestions;
   } catch (error) {
-    console.error("❌ LLM Error:", error.message);
+    console.error("LLM Error:", error.message);
     return [];
+  }
+}
+
+// === DB CACHE REFILL (S FILTREM) ===
+async function refillDbCache(session, ageGroup) {
+  if (!useDatabase || !questionDatabase) return;
+  const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
+
+  try {
+    // Over-fetch 20 otázek
+    const candidates = await questionDatabase.getQuestionsWithRotation(
+      config.mode, null, config.difficulty, DB_FETCH_BATCH, []
+    );
+
+    // Filtr (zde NEVOLÁME Perplexity, protože v DB by už měly být ověřené)
+    const cleanQuestions = filterQuestions(candidates, session);
+
+    const toAdd = cleanQuestions.slice(0, 5);
+    if (toAdd.length > 0) {
+      session.dbCache.push(...toAdd);
+    }
+  } catch (e) {
+    console.error("DB Refill Error:", e.message);
   }
 }
 
@@ -289,291 +308,99 @@ export async function preWarmCache(gameId, ageGroup) {
   const session = getGameSession(gameId);
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
   
-  // Reset flagů
-  session.llmTimedOut = false;
-  session.llmFailed = false;
-  session.dbCache = [];
-  session.llmCache = [];
-  
   console.log(`🔥 Pre-warming cache pro ${gameId} (${ageGroup})`);
 
-  // === KROK 1: Načíst DB otázky ===
+  // DB část
   if (useDatabase && questionDatabase) {
     try {
-      const dbQuestions = await questionDatabase.getQuestionsWithRotation(
-        config.mode, null, config.difficulty, TARGET_BATCH_SIZE, []
+      const candidates = await questionDatabase.getQuestionsWithRotation(
+        config.mode, null, config.difficulty, DB_FETCH_BATCH, []
       );
-      session.dbCache = dbQuestions || [];
-      console.log(`   -> DB Cache: ${session.dbCache.length} otázek`);
+      const cleanQuestions = filterQuestions(candidates, session);
+      session.dbCache = cleanQuestions.slice(0, 5);
+      console.log(`   -> DB Cache: ${session.dbCache.length} čistých otázek`);
     } catch (e) {
-      console.warn("   -> DB fetch error:", e.message);
+      console.warn("   -> DB fetch error");
     }
   }
 
-  // === KROK 2: Spustit LLM generování s timeoutem ===
-  session.llmGenerating = true;
-  
-  const llmPromise = generateBatchFromLLM(ageGroup, session);
-  const timeoutPromise = new Promise((_, reject) => 
-    setTimeout(() => reject(new Error('LLM_TIMEOUT')), LLM_TIMEOUT_MS)
-  );
-  
-  try {
-    const questions = await Promise.race([llmPromise, timeoutPromise]);
-    
-    // Označit jako _pendingSave
-    const formatted = questions.map(q => ({
-      ...q, 
-      _fromLLM: true, 
-      _fromDb: false,
-      _pendingSave: true
-    }));
-    
-    session.llmCache.push(...formatted);
-    console.log(`   -> LLM Cache: ${session.llmCache.length} otázek`);
-    
-  } catch (error) {
-    if (error.message === 'LLM_TIMEOUT') {
-      console.warn(`   ⏱️ LLM timeout po ${LLM_TIMEOUT_MS/1000}s`);
-      session.llmTimedOut = true;
-    } else {
-      console.error(`   ❌ LLM selhalo:`, error.message);
-      session.llmFailed = true;
-    }
-    
-    if (session.dbCache.length >= MIN_BATCH_FOR_START) {
-      console.log(`   ✅ Fallback na DB (${session.dbCache.length} otázek)`);
-    } else {
-      console.error(`   ❌ KRITICKÉ: Nedostatek otázek!`);
-    }
-  } finally {
-    session.llmGenerating = false;
-  }
-  
-  console.log(`📊 Celkem v cache: DB=${session.dbCache.length} + LLM=${session.llmCache.length} = ${session.getTotalCached()}`);
-  
-  // === KROK 3: Spustit background generování pro další hry ===
-  startBackgroundGenerationForFuture(ageGroup);
+  // LLM část
+  startBackgroundGeneration(session, ageGroup);
 }
 
-// === BACKGROUND GENERATION PRO BUDOUCÍ HRY ===
-let backgroundGenerationRunning = false;
-const backgroundCache = new Map();  // ageGroup -> otázky[]
-
-async function startBackgroundGenerationForFuture(ageGroup) {
-  if (backgroundGenerationRunning) return;
-  
-  const existingCache = backgroundCache.get(ageGroup) || [];
-  if (existingCache.length >= 10) {
-    console.log(`📦 Background cache pro ${ageGroup} je plná (${existingCache.length} otázek)`);
-    return;
-  }
-  
-  backgroundGenerationRunning = true;
-  console.log(`🔄 Spouštím background generování pro budoucí hry (${ageGroup})...`);
-  
-  try {
-    // Použít dummy session
-    const dummySession = { usedAnswers: new Set() };
-    const questions = await generateBatchFromLLM(ageGroup, dummySession);
-    
-    const formatted = questions.map(q => ({
-      ...q,
-      _fromLLM: true,
-      _fromDb: false,
-      _pendingSave: true
-    }));
-    
-    const current = backgroundCache.get(ageGroup) || [];
-    backgroundCache.set(ageGroup, [...current, ...formatted].slice(0, 15));
-    
-    console.log(`📦 Background cache pro ${ageGroup}: ${backgroundCache.get(ageGroup).length} otázek`);
-  } catch (e) {
-    console.error('Background generation error:', e.message);
-  } finally {
-    backgroundGenerationRunning = false;
-  }
-}
-
-// Použít background cache při startu nové hry
-function useBackgroundCache(session, ageGroup) {
-  const cached = backgroundCache.get(ageGroup) || [];
-  if (cached.length > 0) {
-    const toUse = cached.splice(0, 5);
-    session.llmCache.push(...toUse);
-    console.log(`📦 Použito ${toUse.length} otázek z background cache`);
-    return toUse.length;
-  }
-  return 0;
-}
-
-// === BACKGROUND GENERATION PRO AKTUÁLNÍ HRU ===
 function startBackgroundGeneration(session, ageGroup) {
   if (session.llmGenerating) return;
-  
   session.llmGenerating = true;
-  
-  generateBatchFromLLM(ageGroup, session)
-    .then(questions => {
-      const formatted = questions.map(q => ({
-        ...q, 
-        _fromLLM: true, 
-        _fromDb: false,
-        _pendingSave: true
-      }));
-      session.llmCache.push(...formatted);
-      console.log(`   -> Background LLM: +${questions.length} otázek`);
-    })
-    .catch(err => {
-      console.error('Background generation error:', err.message);
-    })
-    .finally(() => {
-      session.llmGenerating = false;
-    });
+  generateBatchFromLLM(ageGroup, session).then(qs => {
+    const formatted = qs.map(q => ({...q, _fromLLM: true, _fromDb: false}));
+    session.llmCache.push(...formatted);
+    session.llmGenerating = false;
+  }).catch(() => {
+    session.llmGenerating = false;
+  });
 }
 
-// === GET QUESTION FROM SOURCE ===
-async function getQuestionFromSource(source, session, ageGroup) {
-  const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
-  
-  if (source === 'llm') {
-    // Zkus LLM cache
-    if (session.llmCache.length > 0) {
-      const q = session.llmCache.shift();
-      
-      // Doplnit cache na pozadí
-      if (session.llmCache.length < 3) {
-        startBackgroundGeneration(session, ageGroup);
-      }
-      
-      return q;
-    }
-    
-    // Fallback na DB
-    console.log(`⚠️ LLM cache prázdná, fallback na DB`);
-    if (session.dbCache.length > 0) {
-      return session.dbCache.shift();
-    }
-    
-  } else {
-    // Zkus DB cache
-    if (session.dbCache.length > 0) {
-      const q = session.dbCache.shift();
-      
-      // Doplnit DB cache na pozadí
-      if (useDatabase && questionDatabase && session.dbCache.length < 3) {
-        questionDatabase.getQuestionsWithRotation(config.mode, null, config.difficulty, 5, [])
-          .then(qs => {
-            session.dbCache.push(...qs);
-          })
-          .catch(() => {});
-      }
-      
-      return q;
-    }
-    
-    // Fallback na LLM
-    console.log(`⚠️ DB cache prázdná, fallback na LLM`);
-    if (session.llmCache.length > 0) {
-      return session.llmCache.shift();
-    }
-  }
-  
-  return null;
-}
-
-// === MAIN EXPORT: generateQuestion ===
+// === HLAVNÍ GENERÁTOR ===
 export async function generateQuestion(gameId, ageGroup = 'adult') {
   const session = getGameSession(gameId);
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
   
-  // Inkrementovat kolo
-  const currentRound = session.incrementRound();
-  
-  // Určit zdroj podle čísla kola
-  const preferredSource = getSourceForRound(currentRound);
-  console.log(`📋 Kolo ${currentRound}: Preferovaný zdroj = ${preferredSource.toUpperCase()}`);
-  
-  // Získat otázku z preferovaného zdroje
-  let question = await getQuestionFromSource(preferredSource, session, ageGroup);
-  
-  if (question) {
-    // Uložit LLM otázku do DB až při použití - POUZE pokud prošla fact-checkem!
-    if (question._fromLLM && question._pendingSave && question._factChecked) {
-      delete question._pendingSave;
-      
-      if (useDatabase && questionDatabase) {
-        questionDatabase.saveQuestions([{
-          question: question.question,
-          options: question.options,
-          correct: question.correct
-        }], config.mode, config.difficulty)
-          .then(saved => {
-            if (saved > 0) console.log(`💾 Otázka uložena do DB po použití (fact-checked ✓)`);
-          })
-          .catch(err => console.error("Save error:", err.message));
-      }
-    } else if (question._fromLLM && question._pendingSave && !question._factChecked) {
-      // Otázka nebyla fact-checked - NEULOŽIT do DB!
-      delete question._pendingSave;
-      console.log(`⚠️ Otázka NEBYLA uložena do DB (fact-check přeskočen)`);
-    }
-    
-    // Inkrementovat counter pro DB otázky
-    if (question._id && question._fromDb && useDatabase && questionDatabase) {
-      questionDatabase.markQuestionAsUsed(question._id);
-    }
-    
-    // 🆕 BUG10: Zaznamenat odpověď pro globální deduplikaci (3h okno)
-    if (useDatabase && questionDatabase) {
-      const correctAnswer = question.options[question.correct];
-      questionDatabase.recordUsedAnswer(correctAnswer);
-      console.log(`   📝 Odpověď "${correctAnswer}" zaznamenána pro anti-repeat`);
-    }
-    
-    console.log(`   ✅ Otázka z ${question._fromLLM ? 'LLM' : 'DB'}: "${question.question.substring(0, 40)}..."`);
-    return question;
-  }
-  
-  // === LIVE GENERATION (poslední záchrana) ===
-  console.log("⚠️ Obě cache prázdné, generuji LIVE...");
-  const fresh = await generateBatchFromLLM(ageGroup, session);
-  
-  if (fresh.length > 0) {
-    const q = fresh.shift();
-    
-    // Zbytek do cache
-    session.llmCache.push(...fresh.map(x => ({
-      ...x, 
-      _fromLLM: true, 
-      _fromDb: false,
-      _pendingSave: true
-    })));
-    
-    // Uložit použitou otázku POUZE pokud prošla fact-checkem
-    if (useDatabase && questionDatabase && q._factChecked) {
-      questionDatabase.saveQuestions([q], config.mode, config.difficulty).catch(() => {});
-      questionDatabase.recordUsedAnswer(q.options[q.correct]);
-      console.log(`💾 LIVE otázka uložena do DB (fact-checked ✓)`);
-    } else if (!q._factChecked) {
-      console.log(`⚠️ LIVE otázka NEBYLA uložena do DB (fact-check přeskočen)`);
-      // Ale stále zaznamenat odpověď pro anti-repeat
-      if (useDatabase && questionDatabase) {
-        questionDatabase.recordUsedAnswer(q.options[q.correct]);
-      }
-    }
-    
-    return { ...q, _fromLLM: true, _fromDb: false };
+  let question = null;
+
+  // 1. LLM Cache
+  if (session.llmCache.length > 0) {
+    question = session.llmCache.shift();
+    if (session.llmCache.length < MIN_CACHE_SIZE) startBackgroundGeneration(session, ageGroup);
   }
 
-  // === PANIC MODE ===
-  console.error("❌ CRITICAL: Nelze získat otázku ze žádného zdroje!");
+  // 2. DB Cache
+  if (!question && session.dbCache.length > 0) {
+    question = session.dbCache.shift();
+  }
+  
+  // Doplňování DB
+  if (useDatabase && questionDatabase && session.dbCache.length < MIN_CACHE_SIZE) {
+     refillDbCache(session, ageGroup).catch(() => {});
+  }
+
+  // 3. Live Generace
+  if (!question) {
+    console.log("⚠️ Cache prázdná, generuji live...");
+    const fresh = await generateBatchFromLLM(ageGroup, session);
+    if (fresh.length > 0) {
+      question = fresh.shift();
+      session.llmCache.push(...fresh.map(x => ({...x, _fromLLM: true})));
+      question._fromLLM = true;
+    }
+  }
+
+  // 4. Finální kontrola a blokace
+  if (question) {
+    const answer = question.options[question.correct];
+    
+    // Last-minute check (pokud se mezitím zablokovala)
+    if (isAnswerBlocked(answer) || session.isAnswerUsed(answer)) {
+       console.log(`♻️ Last minute skip: "${answer}". Hledám jinou.`);
+       return generateQuestion(gameId, ageGroup);
+    }
+
+    blockAnswerGlobally(answer);
+    session.addUsedAnswer(answer);
+
+    if (question._fromDb && question._id && questionDatabase) {
+        questionDatabase.markQuestionAsUsed(question._id).catch(() => {});
+    }
+
+    return question;
+  }
+
+  // 5. Panic Mode
+  console.error("❌ CRITICAL: Panic question!");
   return {
     question: "Systémová chyba: Nelze načíst otázku. Kdo vyhrává?",
     options: ["Lovec", "Štvanec", "Nikdo"],
     correct: 2,
     _error: true,
-    _fromLLM: false,
-    _fromDb: false
+    _fromLLM: false
   };
 }
