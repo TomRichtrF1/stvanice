@@ -135,22 +135,9 @@ class GameSession {
     this.llmCache = [];
     this.llmGenerating = false;
     this.usedAnswers = new Set();
-    this.questionCount = 0;  // 🆕 Počítadlo pro střídání LLM/DB
   }
   isAnswerUsed(ans) { return this.usedAnswers.has(normalizeText(ans)); }
   addUsedAnswer(ans) { this.usedAnswers.add(normalizeText(ans)); }
-}
-
-/**
- * 🔄 LOGIKA STŘÍDÁNÍ LLM/DB
- * Kolo 1-3:  LLM
- * Kolo 4-5:  DB
- * Kolo 6+:   Střídání (sudé = LLM, liché = DB)
- */
-function shouldUseLLM(round) {
-  if (round <= 3) return true;   // Kola 1-3: LLM
-  if (round <= 5) return false;  // Kola 4-5: DB
-  return round % 2 === 0;        // 6+: sudé=LLM, liché=DB
 }
 
 function getGameSession(gameId) {
@@ -611,42 +598,22 @@ export async function generateQuestion(gameId, ageGroup = 'adult') {
   const session = getGameSession(gameId);
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
   
-  // 🆕 Inkrementace počítadla kol pro střídání
-  session.questionCount++;
-  const round = session.questionCount;
-  const preferLLM = shouldUseLLM(round);
-  
-  console.log(`🎯 Kolo ${round}: Preferuji ${preferLLM ? 'LLM' : 'DB'} (LLM: ${session.llmCache.length}, DB: ${session.dbCache.length})`);
-  
   let question = null;
 
-  // 🔄 STŘÍDÁNÍ PODLE KOLA
-  if (preferLLM) {
-    // Priorita: LLM → DB fallback
-    if (session.llmCache.length > 0) {
-      question = session.llmCache.shift();
-      console.log(`   ✅ Použita LLM otázka`);
-    } else if (session.dbCache.length > 0) {
-      question = session.dbCache.shift();
-      console.log(`   ⚠️ LLM prázdná, fallback na DB`);
-    }
-  } else {
-    // Priorita: DB → LLM fallback
-    if (session.dbCache.length > 0) {
-      question = session.dbCache.shift();
-      console.log(`   ✅ Použita DB otázka`);
-    } else if (session.llmCache.length > 0) {
-      question = session.llmCache.shift();
-      console.log(`   ⚠️ DB prázdná, fallback na LLM`);
-    }
+  // 1. Zkusíme LLM Cache
+  if (session.llmCache.length > 0) {
+    question = session.llmCache.shift();
+    if (session.llmCache.length < MIN_CACHE_SIZE) startBackgroundGeneration(session, ageGroup);
+  }
+
+  // 2. Pokud není LLM, zkusíme DB Cache
+  if (!question && session.dbCache.length > 0) {
+    question = session.dbCache.shift();
   }
   
-  // Doplňování cache na pozadí
-  if (session.llmCache.length < MIN_CACHE_SIZE) {
-    startBackgroundGeneration(session, ageGroup);
-  }
+  // Doplňování DB cache
   if (useDatabase && questionDatabase && session.dbCache.length < MIN_CACHE_SIZE) {
-    refillDbCache(session, ageGroup).catch(() => {});
+     refillDbCache(session, ageGroup).catch(() => {});
   }
 
   // 3. Live Generace (S Retry)
