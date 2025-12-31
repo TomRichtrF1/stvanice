@@ -1,435 +1,453 @@
 import { useState, useEffect, useRef } from 'react';
-import { Socket } from 'socket.io-client';
-import { Trophy, Timer, AlertTriangle, Users, Volume2, VolumeX, ArrowRight, Skull, Frown } from 'lucide-react';
+import { Target, User, CheckCircle, XCircle, Clock, Play, Baby, Brain, Skull, Flag, Loader } from 'lucide-react';
+import { useSocket } from '../contexts/SocketContext';
+import { useGameAudio } from '../hooks/useGameAudio';
+import GameEndOverlay from './GameEndOverlay';
 
-// === TYPY ===
 interface Player {
   id: string;
-  role: 'hunter' | 'prey' | null;
+  role: 'hunter' | 'prey';
   position: number;
-  ready: boolean;
-  connected: boolean;
-  hasAnswered?: boolean;
-  lastAnswer?: number | null;
+  ready?: boolean;
 }
 
 interface Question {
   question: string;
   options: string[];
   correct: number;
-  _error?: boolean;
+  _fromLLM?: boolean;
+  _fromDb?: boolean;
 }
 
 interface GameBoardProps {
-  socket: Socket;
-  roomCode: string;
+  myRole: 'hunter' | 'prey';
   players: Player[];
   currentQuestion: Question | null;
-  myRole: 'hunter' | 'prey' | null;
-  gamePhase: string;
-  settings: { headstart: number };
-  onPlayAgain: () => void;
-  waitingForReady: boolean;
-  gameOverPending: boolean;
+  onSubmitAnswer: (answerIndex: number) => void;
+  gameOver: boolean;
+  winner: 'hunter' | 'prey' | null;
+  roundResult: any;
+  roomCode: string;
+  onRestart: () => void;
+  gameMode: 'adult' | 'kid';
 }
 
-// === KOMPONENTA HERNÍ PLÁN ===
 export default function GameBoard({
-  socket,
-  roomCode,
+  myRole,
   players,
   currentQuestion,
-  myRole,
-  gamePhase,
-  settings,
-  onPlayAgain,
-  waitingForReady,
-  gameOverPending
+  onSubmitAnswer,
+  gameOver,
+  winner,
+  roundResult,
+  roomCode,
+  onRestart,
+  gameMode
 }: GameBoardProps) {
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [showResult, setShowResult] = useState(false);
-  const [roundResult, setRoundResult] = useState<{
-    correctAnswer: number;
-    hunterCorrect: boolean;
-    preyCorrect: boolean;
-  } | null>(null);
   
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Zvukové efekty
-  const playSound = (type: 'correct' | 'wrong' | 'tick' | 'win' | 'lose') => {
-    if (!soundEnabled) return;
-    const sounds = {
-      correct: '/sounds/correct.mp3',
-      wrong: '/sounds/wrong.mp3',
-      tick: '/sounds/tick.mp3',
-      win: '/sounds/win.mp3',
-      lose: '/sounds/lose.mp3'
-    };
-    
-    try {
-      const audio = new Audio(sounds[type]);
-      audio.volume = 0.5;
-      audio.play().catch(() => {});
-    } catch (e) {
-      console.warn("Audio play failed");
-    }
-  };
-
-  // Socket listenery
-  useEffect(() => {
-    socket.on('round_results', (data) => {
-      setRoundResult(data);
-      setShowResult(true);
-      
-      // Přehrát zvuk podle mého výsledku
-      const me = players.find(p => p.id === socket.id);
-      if (me) {
-        const amICorrect = me.role === 'hunter' ? data.hunterCorrect : data.preyCorrect;
-        playSound(amICorrect ? 'correct' : 'wrong');
-      }
-    });
-
-    socket.on('next_question', () => {
-      setShowResult(false);
-      setSelectedAnswer(null);
-      setHasSubmitted(false);
-      setRoundResult(null);
-    });
-
-    return () => {
-      socket.off('round_results');
-      socket.off('next_question');
-    };
-  }, [socket, players, soundEnabled]);
-
-  // Handler odpovědi
-  const handleAnswer = (index: number) => {
-    if (hasSubmitted || showResult || !myRole) return;
-    setSelectedAnswer(index);
-    setHasSubmitted(true);
-    socket.emit('submit_answer', { code: roomCode, answerIndex: index });
-  };
-
-  // Handler "Jsem připraven" (další kolo)
-  const handleReadyClick = () => {
-    socket.emit('playerReady', { code: roomCode });
-  };
-
-  // Pozice hráčů
+  const { socket } = useSocket();
+  const { playSfx, playTickTack, stopTickTack } = useGameAudio();
+  
   const hunter = players.find(p => p.role === 'hunter');
   const prey = players.find(p => p.role === 'prey');
-  const hunterPos = hunter?.position || 0;
-  const preyPos = prey?.position || settings.headstart;
+  
+  // POJISTKA PROTI BÍLÉ OBRAZOVCE
+  if (!hunter && !prey) {
+    return (
+      <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center text-white gap-4">
+        <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-xl font-bold">Načítám herní plán...</p>
+        <p className="text-slate-400 text-sm">Obnovuji spojení</p>
+      </div>
+    );
+  }
+  
+  const serverHunterPos = hunter?.position || 0;
+  const serverPreyPos = prey?.position || 0;
 
-  // === VIZUÁL HERNÍHO PLÁNU ===
-  // Generování políček (0 až 8)
-  const renderTrack = () => {
-    const totalSteps = 9; // 0..8 (Cíl)
-    const track = [];
+  // == LOKÁLNÍ STAV PRO VIZUÁLNÍ POZICE (ZPOŽDĚNÉ) ==
+  const [visualHunterPos, setVisualHunterPos] = useState(serverHunterPos);
+  const [visualPreyPos, setVisualPreyPos] = useState(serverPreyPos);
 
-    for (let i = 0; i < totalSteps; i++) {
-      const isStart = i === 0;
-      const isFinish = i === 8;
-      const isHunterHere = hunterPos === i;
-      const isPreyHere = preyPos === i;
-      const isCollision = isHunterHere && isPreyHere;
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [hasAnswered, setHasAnswered] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [opponentReady, setOpponentReady] = useState(false);
+  const [showReadyButton, setShowReadyButton] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(20);
+  
+  const lastHunterPos = useRef<number>(-1);
+  const lastPreyPos = useRef<number>(-1);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-      // Styl políčka
-      let tileColor = "bg-slate-800 border-slate-700";
-      if (isStart) tileColor = "bg-red-900/30 border-red-700/50";
-      if (isFinish) tileColor = "bg-green-900/30 border-green-700/50";
-      
-      // Zvýraznění aktivní zóny (mezi lovcem a štvancem)
-      const isActiveZone = i > hunterPos && i < preyPos;
-      if (isActiveZone) tileColor = "bg-slate-800/80 border-slate-600 shadow-[0_0_15px_rgba(0,0,0,0.5)_inset]";
+  // Poslouchat na player_ready_update
+  useEffect(() => {
+    if (!socket) return;
 
-      track.push(
-        <div 
-          key={i} 
-          className={`
-            relative w-full aspect-square rounded-xl border-2 flex items-center justify-center
-            transition-all duration-500 transform
-            ${tileColor}
-            ${(isHunterHere || isPreyHere) ? 'scale-105 z-10 shadow-2xl' : 'scale-100 opacity-70'}
-          `}
-        >
-          {/* Číslo pole */}
-          <span className="absolute top-1 left-2 text-xs font-mono text-slate-500 font-bold opacity-50">
-            {i}
-          </span>
+    const handleReadyUpdate = ({ players: updatedPlayers }: { players: any[] }) => {
+      const opponent = updatedPlayers.find(p => p.role !== myRole);
+      if (opponent) {
+        setOpponentReady(opponent.ready);
+      }
+    };
 
-          {/* CÍL IKONA */}
-          {isFinish && !isPreyHere && (
-            <div className="absolute opacity-20 text-4xl">🏁</div>
-          )}
+    socket.on('player_ready_update', handleReadyUpdate);
 
-          {/* HRÁČI NA POLI */}
-          <div className="flex gap-2 items-center justify-center w-full px-1">
-            
-            {/* LOVEC */}
-            {isHunterHere && (
-              <div className={`
-                relative transition-all duration-500
-                ${isCollision ? 'animate-bounce' : 'animate-pulse'}
-              `}>
-                <div className="text-4xl filter drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">👹</div>
-                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider whitespace-nowrap shadow-lg">
-                  Lovec
-                </div>
-              </div>
-            )}
+    return () => {
+      socket.off('player_ready_update', handleReadyUpdate);
+    };
+  }, [socket, myRole]);
 
-            {/* VS (Při kolizi) */}
-            {isCollision && (
-              <div className="text-yellow-500 font-black text-xl animate-ping absolute z-20">VS</div>
-            )}
-
-            {/* ŠTVANEC */}
-            {isPreyHere && (
-              <div className={`
-                relative transition-all duration-500
-                ${isCollision ? 'animate-shake' : 'animate-bounce-slow'}
-              `}>
-                <div className="text-4xl filter drop-shadow-[0_0_10px_rgba(34,197,94,0.8)]">🏃</div>
-                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider whitespace-nowrap shadow-lg">
-                  Štvanec
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Efekt cesty (spojnice) */}
-          {i < totalSteps - 1 && (
-            <div className={`
-              absolute -right-[4px] top-1/2 -translate-y-1/2 w-[calc(100%+8px)] h-1 rounded-full -z-10
-              ${i >= hunterPos && i < preyPos ? 'bg-gradient-to-r from-red-500/50 to-green-500/50 animate-pulse' : 'bg-slate-800'}
-            `}></div>
-          )}
-        </div>
-      );
+  // === 1. SYNCHRONIZACE POZIC S EFEKTEM ZPOŽDĚNÍ ===
+  useEffect(() => {
+    if (roundResult) {
+      // Posun figurek 2s PO zobrazení vyhodnocení
+      const timer = setTimeout(() => {
+        setVisualHunterPos(serverHunterPos);
+        setVisualPreyPos(serverPreyPos);
+      }, 2000);  // 2s po vyhodnocení
+      return () => clearTimeout(timer);
+    } else {
+      // V jiných případech (start hry, reconnect) synchronizujeme hned
+      setVisualHunterPos(serverHunterPos);
+      setVisualPreyPos(serverPreyPos);
     }
-    return track;
+  }, [serverHunterPos, serverPreyPos, roundResult]);
+
+  // === 2. AUDIO EFEKTY POHYBU ===
+  useEffect(() => {
+    const hunterMoved = visualHunterPos !== lastHunterPos.current && lastHunterPos.current !== -1;
+    const preyMoved = visualPreyPos !== lastPreyPos.current && lastPreyPos.current !== -1;
+    
+    if (hunterMoved || preyMoved) {
+      playSfx('step.mp3');
+    }
+    
+    if (visualHunterPos === visualPreyPos - 1 && visualHunterPos !== lastHunterPos.current && visualHunterPos > 0) {
+      setTimeout(() => playSfx('danger.mp3'), 300);
+    }
+    if (visualPreyPos === 7 && visualPreyPos !== lastPreyPos.current) {
+      setTimeout(() => playSfx('hope.mp3'), 300);
+    }
+    
+    lastHunterPos.current = visualHunterPos;
+    lastPreyPos.current = visualPreyPos;
+  }, [visualHunterPos, visualPreyPos, playSfx]);
+
+  // === AUDIO TICK-TACK ===
+  useEffect(() => {
+    if (currentQuestion && !hasAnswered && !roundResult && !gameOver && timeLeft > 0 && timeLeft <= 10) {
+      const timeoutId = setTimeout(() => {
+        playTickTack();
+      }, 500); 
+      return () => clearTimeout(timeoutId);
+    } else {
+      stopTickTack();
+    }
+  }, [currentQuestion, hasAnswered, roundResult, gameOver, timeLeft, playTickTack, stopTickTack]);
+
+  useEffect(() => {
+    if (gameOver && winner) {
+      stopTickTack();
+      if (winner === 'prey') playSfx('triumph.mp3');
+      else playSfx('failure.mp3');
+    }
+  }, [gameOver, winner, playSfx, stopTickTack]);
+
+  useEffect(() => {
+    if (currentQuestion && !hasAnswered && !gameOver && !roundResult) {
+      setTimeLeft(20);
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            handleAnswerClick(999);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [currentQuestion, hasAnswered, gameOver, roundResult]);
+
+  useEffect(() => {
+    if (roundResult) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setShowReadyButton(false);
+      // 🆕 Prodloužit čekání na zobrazení tlačítka (po posunu figurek)
+      const timeout = setTimeout(() => setShowReadyButton(true), 3000);  // 3s po vyhodnocení (1s po posunu)
+      return () => clearTimeout(timeout);
+    } else {
+      setShowReadyButton(false);
+      setIsReady(false);
+      setOpponentReady(false);
+      setSelectedAnswer(null);
+      setHasAnswered(false);
+    }
+  }, [roundResult, currentQuestion]);
+
+  const handleAnswerClick = (index: number) => {
+    if (hasAnswered || gameOver) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    stopTickTack();
+    setSelectedAnswer(index);
+    setHasAnswered(true);
+    onSubmitAnswer(index);
   };
 
-  // === RENDER ===
+  const handleReadyClick = () => {
+    if (isReady) return;
+    setIsReady(true);
+    if (socket) {
+      socket.emit('player_ready', { code: roomCode });
+      console.log('📤 Odesláno player_ready');
+    }
+  };
+
+  const fields = Array.from({ length: 9 }, (_, i) => i);
+  
+  const getTimerColor = () => {
+    if (timeLeft > 10) return 'text-cyan-400 border-cyan-400';
+    if (timeLeft > 5) return 'text-yellow-400 border-yellow-400';
+    return 'text-red-500 border-red-500 animate-pulse';
+  };
+
+  if (gameOver && winner) {
+    return (
+      <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-4">
+        <GameEndOverlay winner={winner} myRole={myRole} onRestart={onRestart} />
+      </div>
+    );
+  }
+
   return (
-    // ZMĚNA 1: overflow-y-auto pro tablet/mobil, lg:overflow-hidden pro desktop
-    <div className="min-h-screen bg-slate-900 overflow-y-auto lg:overflow-hidden relative selection:bg-cyan-500/30">
+    <div className="fixed inset-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col md:flex-row overflow-hidden">
       
-      {/* Ovládání zvuku */}
-      <button 
-        onClick={() => setSoundEnabled(!soundEnabled)}
-        className="fixed top-4 right-4 z-50 bg-slate-800/80 p-3 rounded-full hover:bg-slate-700 transition-colors border border-slate-600 text-slate-400 hover:text-white"
-      >
-        {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-      </button>
-
-      {/* ZMĚNA 2: Flex kontejner, na mobilu min-h-screen (aby se natáhl), na desktopu fixní */}
-      <div className="flex flex-col lg:flex-row min-h-screen lg:h-screen lg:max-h-screen overflow-visible lg:overflow-hidden">
-        
-        {/* LEVÝ PANEL - HERNÍ PLÁN (TRACK) */}
-        {/* ZMĚNA 3: min-h-[45vh] h-auto místo fixní výšky */}
-        <div className="w-full lg:w-[55%] min-h-[45vh] h-auto lg:h-full relative flex items-center justify-center p-4 lg:p-8 order-1 lg:order-1 flex-shrink-0">
-          
-          {/* Pozadí mapy */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-             <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800/30 via-slate-900 to-slate-900"></div>
-             <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-500/5 rounded-full blur-3xl animate-pulse-slow"></div>
-             <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-green-500/5 rounded-full blur-3xl animate-pulse-slow delay-1000"></div>
+      {/* Hlavička s rolí - mobilní verze - KOMPAKTNÍ */}
+      <div className="shrink-0 bg-slate-800/90 p-1.5 shadow-lg z-20 flex justify-between items-center md:hidden border-b border-slate-700">
+        <div className={`flex items-center gap-1 px-2 py-1 rounded border ${myRole === 'hunter' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'bg-green-500/20 border-green-500/50 text-green-400'}`}>
+          {myRole === 'hunter' ? <Target size={14} /> : <User size={14} />}
+          <span className="text-[10px] font-bold uppercase">{myRole === 'hunter' ? 'Lovec' : 'Štvanec'}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] text-cyan-400 font-mono">{roomCode}</span>
+          <div className="flex items-center gap-0.5 px-1 py-0.5 bg-slate-700/50 rounded text-[9px]">
+            {gameMode === 'kid' ? <Baby size={10} className="text-pink-400"/> : <Brain size={10} className="text-cyan-400"/>}
+            <span className="text-slate-400">{gameMode === 'kid' ? 'Jr' : 'Dosp'}</span>
           </div>
+        </div>
+      </div>
 
-          {/* Mřížka herního plánu */}
-          <div className="relative z-10 w-full max-w-2xl">
-            <div className="grid grid-cols-3 gap-3 md:gap-4 lg:gap-6 p-4 bg-slate-800/30 rounded-3xl backdrop-blur-sm border border-slate-700/50 shadow-2xl">
-              {renderTrack()}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        
+        {/* === HERNÍ PLÁN === */}
+        <div className="flex-1 flex flex-col min-h-0 bg-slate-800/30 md:p-8 p-3 overflow-y-auto md:overflow-visible relative">
+            
+            {/* Desktop: Hlavička s rolí - ZMENŠENÁ */}
+            <div className="hidden md:flex justify-between items-center mb-4">
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${myRole === 'hunter' ? 'bg-red-500/20 border-red-500/70 text-red-400' : 'bg-green-500/20 border-green-500/70 text-green-400'}`}>
+                  {myRole === 'hunter' ? <Target size={18} /> : <User size={18} />}
+                  <span className="text-sm font-bold uppercase">{myRole === 'hunter' ? 'Jsi Lovec' : 'Jsi Štvanec'}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Kód místnosti */}
+                  <span className="text-slate-400 text-xs font-mono">
+                    Kód: <span className="text-cyan-400 font-bold">{roomCode}</span>
+                  </span>
+                  {/* Režim */}
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-700/50 rounded border border-slate-600">
+                    {gameMode === 'kid' ? <Baby size={14} className="text-pink-400"/> : <Brain size={14} className="text-cyan-400"/>}
+                    <span className="text-slate-300 text-xs font-semibold">{gameMode === 'kid' ? 'Junior' : 'Dospělí'}</span>
+                  </div>
+                </div>
             </div>
             
-            {/* Info pod mapou */}
-            <div className="mt-6 flex justify-between items-center text-sm font-bold text-slate-500 px-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
-                LOVEC START
-              </div>
-              <div className="flex items-center gap-2">
-                CÍL (ÚTĚK)
-                <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
-              </div>
+            {/* Mapa polí */}
+            <div className="flex flex-col gap-1.5 md:gap-4 flex-1 justify-center">
+                {[...fields].reverse().map((fieldNum) => {
+                const isHunterHere = visualHunterPos === fieldNum;
+                const isPreyHere = visualPreyPos === fieldNum;
+                const isStart = fieldNum === 0;
+                const isFinish = fieldNum === 8;
+                
+                const isHunterTrail = visualHunterPos > 0 && fieldNum < visualHunterPos && fieldNum > 0;
+                const isPreyPath = visualPreyPos > 0 && fieldNum > visualPreyPos && fieldNum < 8;
+
+                let bgStyle = 'bg-slate-800/60 border-slate-700/50'; 
+                if (isStart) bgStyle = 'bg-red-500/10 border-red-500/20';
+                else if (isFinish) bgStyle = 'bg-green-500/10 border-green-500/20';
+                
+                if (isHunterTrail) bgStyle = 'bg-red-900/20 border-red-800/30';
+                if (isHunterHere) bgStyle = 'bg-gradient-to-r from-red-900/50 to-slate-800 border-red-500/40';
+                
+                if (isPreyPath) bgStyle = 'bg-green-900/20 border-green-800/30';
+                if (isPreyHere) bgStyle = 'bg-gradient-to-r from-green-900/50 to-slate-800 border-green-500/40';
+
+                return (
+                    <div key={fieldNum} className={`relative px-4 rounded-xl border transition-all duration-300 flex items-center justify-between ${bgStyle} 
+                        min-h-[3rem] md:min-h-[5rem] py-2
+                    `}>
+                        <span className={`font-mono font-bold text-sm md:text-2xl ${
+                            isStart ? 'text-red-500 tracking-widest' : isFinish ? 'text-green-500 tracking-widest' : 'text-slate-500'
+                        }`}>
+                            {isStart ? 'START' : isFinish ? 'CÍL' : fieldNum}
+                        </span>
+                        
+                        <div className="flex gap-2">
+                            {isHunterHere && (
+                                <div className="flex items-center gap-1.5 bg-red-600 text-white px-2 py-1 md:px-4 md:py-2 rounded-lg shadow-lg animate-bounce z-10 transition-all duration-500">
+                                    <Skull size={14} className="md:w-6 md:h-6" />
+                                    <span className="text-[10px] md:text-sm font-bold uppercase">Lovec</span>
+                                </div>
+                            )}
+                            {isPreyHere && (
+                                <div className="flex items-center gap-1.5 bg-green-600 text-white px-2 py-1 md:px-4 md:py-2 rounded-lg shadow-lg animate-pulse z-10 transition-all duration-500">
+                                    <User size={14} className="md:w-6 md:h-6"/>
+                                    <span className="text-[10px] md:text-sm font-bold uppercase">Štvanec</span>
+                                </div>
+                            )}
+                            {isFinish && !isPreyHere && <Flag className="text-slate-700 w-4 h-4 md:w-6 md:h-6"/>}
+                        </div>
+                    </div>
+                );
+                })}
             </div>
-          </div>
         </div>
 
-        {/* PRAVÝ PANEL - OTÁZKY A STATUS */}
-        {/* ZMĚNA 4: min-h-[55vh] h-auto místo fixní výšky */}
-        <div className="w-full lg:w-[45%] min-h-[55vh] h-auto lg:h-full relative bg-slate-800/50 backdrop-blur-sm border-t lg:border-t-0 lg:border-l border-slate-700/50 flex flex-col order-2 lg:order-2">
-          
-          {/* Header kola */}
-          <div className="p-6 border-b border-slate-700/50 flex justify-between items-center bg-slate-900/50">
-            <div className="flex items-center gap-3">
-              <div className="bg-cyan-500/10 p-2 rounded-lg">
-                <Timer className="text-cyan-400 w-5 h-5" />
-              </div>
-              <span className="text-slate-400 font-mono text-sm tracking-wider uppercase">
-                Kolo {gamePhase === 'playing' ? (players[0]?.position || 0) + (players[1]?.position || 0) + 1 : '-'}
-              </span>
-            </div>
-            <div className="px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs font-bold text-slate-400">
-              Kód: {roomCode}
-            </div>
-          </div>
-
-          {/* OBSAH - OTÁZKA */}
-          <div className="flex-1 flex flex-col p-6 lg:p-10 overflow-y-auto">
-            {gamePhase === 'finished' ? (
-              // KONEC HRY
-              <div className="flex-1 flex flex-col items-center justify-center text-center space-y-8 animate-fade-in">
-                <Trophy size={80} className="text-yellow-400 animate-bounce" />
-                <h2 className="text-5xl font-black text-white">
-                   {hunterPos >= preyPos ? 'LOVEC VYHRÁL!' : 'ŠTVANEC UTEKL!'}
-                </h2>
-                <p className="text-slate-400 text-lg max-w-md">
-                  {hunterPos >= preyPos 
-                    ? 'Lovec úspěšně dopadl svou kořist. Hra končí.' 
-                    : 'Štvanec prokázal neuvěřitelné znalosti a unikl do bezpečí.'}
-                </p>
-                <button
-                  onClick={onPlayAgain}
-                  className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-10 rounded-2xl shadow-lg transform hover:scale-105 transition-all text-xl"
-                >
-                  HRÁT ZNOVU
-                </button>
-              </div>
-            ) : !currentQuestion ? (
-              // NAČÍTÁNÍ
-              <div className="flex-1 flex items-center justify-center">
-                <div className="animate-spin text-cyan-500">
-                  <Timer size={40} />
-                </div>
-              </div>
-            ) : showResult && roundResult ? (
-              // VÝSLEDEK KOLA
-              <div className="flex-1 flex flex-col items-center justify-center text-center space-y-8 animate-slide-up">
-                <div className={`
-                  p-6 rounded-full border-4 shadow-2xl mb-4
-                  ${(myRole === 'hunter' ? roundResult.hunterCorrect : roundResult.preyCorrect) 
-                    ? 'bg-green-500/20 border-green-500 text-green-400' 
-                    : 'bg-red-500/20 border-red-500 text-red-400'}
-                `}>
-                  {(myRole === 'hunter' ? roundResult.hunterCorrect : roundResult.preyCorrect) 
-                    ? <Trophy size={48} /> 
-                    : (myRole === 'hunter' ? <Frown size={48} /> : <Skull size={48} />)}
-                </div>
+        {/* === OVLÁDACÍ PANEL === */}
+        <div className="shrink-0 bg-slate-800 border-t border-slate-600 md:border-t-0 md:border-l md:w-[500px] shadow-[0_-5px_30px_rgba(0,0,0,0.9)] z-30">
+            
+            <div className="p-3 md:p-8 flex flex-col justify-center h-full">
                 
-                <h3 className="text-3xl font-bold text-white">
-                  {(myRole === 'hunter' ? roundResult.hunterCorrect : roundResult.preyCorrect) 
-                    ? 'SPRÁVNĚ!' 
-                    : 'ŠPATNĚ!'}
-                </h3>
-                
-                <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 w-full">
-                  <p className="text-slate-500 text-sm uppercase mb-2">Správná odpověď</p>
-                  <p className="text-xl font-bold text-white">
-                    {currentQuestion.options[roundResult.correctAnswer]}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 w-full">
-                  <div className={`p-4 rounded-xl border ${roundResult.hunterCorrect ? 'bg-green-900/20 border-green-500/50' : 'bg-red-900/20 border-red-500/50'}`}>
-                    <div className="text-xs text-slate-400 mb-1">LOVEC</div>
-                    <div className="font-bold">{roundResult.hunterCorrect ? '+1 KROK' : 'STOJÍ'}</div>
-                  </div>
-                  <div className={`p-4 rounded-xl border ${roundResult.preyCorrect ? 'bg-green-900/20 border-green-500/50' : 'bg-red-900/20 border-red-500/50'}`}>
-                    <div className="text-xs text-slate-400 mb-1">ŠTVANEC</div>
-                    <div className="font-bold">{roundResult.preyCorrect ? '+1 KROK' : 'STOJÍ'}</div>
-                  </div>
-                </div>
-
-                {/* Tlačítko DALŠÍ KOLO pro synchronizaci */}
-                {waitingForReady && !gameOverPending && (
-                   <button
-                     onClick={handleReadyClick}
-                     disabled={players.find(p => p.id === socket.id)?.ready}
-                     className={`
-                       w-full py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2
-                       ${players.find(p => p.id === socket.id)?.ready 
-                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
-                         : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg shadow-orange-500/20'}
-                     `}
-                   >
-                     {players.find(p => p.id === socket.id)?.ready ? (
-                       <>
-                         <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
-                         <span>ČEKÁM NA SOUPEŘE...</span>
-                       </>
-                     ) : (
-                       <>
-                         <span>DALŠÍ KOLO</span>
-                         <ArrowRight size={20} />
-                       </>
-                     )}
-                   </button>
+                {/* 1. ČEKÁNÍ NA START */}
+                {!currentQuestion && !gameOver && (
+                    <div className="flex flex-col md:gap-8 gap-4 items-center text-center pb-2">
+                        <div className="space-y-2">
+                            <h3 className="text-white text-lg md:text-2xl font-bold uppercase tracking-widest">
+                                {isReady ? 'Čekání na soupeře' : 'PŘIPRAVENI KE HŘE?'}
+                            </h3>
+                            <p className="text-slate-400 text-xs md:text-sm">Potvrďte start kola</p>
+                        </div>
+                        
+                        <button 
+                            onClick={handleReadyClick}
+                            disabled={isReady}
+                            className={`w-full py-4 md:py-6 rounded-xl font-black text-xl md:text-3xl uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 ${
+                                isReady 
+                                ? 'bg-slate-700 text-slate-500 cursor-not-allowed border border-white/5' 
+                                : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:brightness-110 text-white shadow-green-900/20'
+                            }`}
+                        >
+                            {isReady ? <Clock className="animate-spin md:w-8 md:h-8"/> : <Play fill="currentColor" className="md:w-8 md:h-8"/>}
+                            {isReady ? 'ČEKÁM' : 'START HRY'}
+                        </button>
+                    </div>
                 )}
-                
-                {gameOverPending && (
-                  <div className="text-yellow-400 font-bold animate-pulse">
-                     VYHODNOCUJI VÍTĚZE...
-                  </div>
-                )}
-              </div>
-            ) : (
-              // ZOBRAZENÍ OTÁZKY
-              <div className="flex flex-col h-full animate-fade-in">
-                <div className="flex-1 flex flex-col justify-center space-y-6">
-                   <h3 className="text-2xl lg:text-3xl font-bold text-white leading-tight text-center">
-                     {currentQuestion.question}
-                   </h3>
-                   
-                   <div className="grid gap-3 mt-4">
-                     {currentQuestion.options.map((option, idx) => (
-                       <button
-                         key={idx}
-                         onClick={() => handleAnswer(idx)}
-                         disabled={hasSubmitted || !myRole}
-                         className={`
-                           group relative w-full p-5 lg:p-6 rounded-2xl text-left transition-all duration-200 border-2
-                           ${hasSubmitted && selectedAnswer === idx 
-                             ? 'bg-cyan-600 border-cyan-400 text-white scale-[1.02] shadow-lg shadow-cyan-500/20' 
-                             : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-cyan-500/50 hover:bg-slate-750'}
-                           ${!myRole ? 'opacity-50 cursor-not-allowed' : ''}
-                         `}
-                       >
-                         <div className="flex items-center gap-4">
-                           <div className={`
-                             w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm
-                             ${hasSubmitted && selectedAnswer === idx ? 'bg-white text-cyan-600' : 'bg-slate-700 text-slate-400 group-hover:bg-slate-600'}
-                           `}>
-                             {String.fromCharCode(65 + idx)}
-                           </div>
-                           <span className="text-lg font-medium">{option}</span>
-                         </div>
-                       </button>
-                     ))}
-                   </div>
-                </div>
 
-                {/* Status bar dole */}
-                <div className="mt-6 pt-6 border-t border-slate-700/50 flex justify-between items-center text-sm text-slate-500">
-                   <div className="flex items-center gap-2">
-                     <Users size={16} />
-                     <span>Hrajete jako: <strong className={myRole === 'hunter' ? 'text-red-400' : 'text-green-400'}>{myRole === 'hunter' ? 'LOVEC' : 'ŠTVANEC'}</strong></span>
-                   </div>
-                   {hasSubmitted && (
-                     <div className="flex items-center gap-2 text-cyan-400 animate-pulse">
-                       <span>Čekám na soupeře...</span>
-                     </div>
-                   )}
-                </div>
-              </div>
-            )}
-          </div>
+                {/* 2. OTÁZKA */}
+                {currentQuestion && (
+                    <div className="flex flex-col gap-3 md:gap-6 w-full max-w-lg mx-auto md:h-full md:justify-center">
+                        
+                        {/* Timer Line */}
+                        <div className="w-full h-1.5 md:h-3 bg-slate-700 rounded-full overflow-hidden">
+                            <div className={`h-full transition-all duration-1000 linear ${
+                                timeLeft > 10 ? 'bg-cyan-400' : timeLeft > 5 ? 'bg-yellow-400' : 'bg-red-500'
+                            }`} style={{ width: `${(timeLeft / 20) * 100}%` }} />
+                        </div>
+
+                        {/* Text otázky */}
+                        <div className="flex justify-between items-start gap-3 mb-1">
+                            <div className="flex-1">
+                                <h3 className="text-white font-bold text-sm md:text-2xl leading-snug max-h-[60px] md:max-h-none overflow-y-auto md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                                    {currentQuestion.question}
+                                </h3>
+                                {/* Badge zdroje */}
+                                <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded ${
+                                    currentQuestion._fromLLM 
+                                        ? 'bg-green-900/50 text-green-400' 
+                                        : 'bg-blue-900/50 text-blue-400'
+                                }`}>
+                                    {currentQuestion._fromLLM ? '⚡ LLM' : '🗄️ DB'}
+                                </span>
+                            </div>
+                            {!roundResult && (
+                                <div className={`shrink-0 w-8 h-8 md:w-16 md:h-16 rounded-lg border-2 flex items-center justify-center font-mono font-bold text-sm md:text-3xl ${getTimerColor()}`}>
+                                    {timeLeft}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Odpovědi */}
+                        <div className="grid grid-cols-1 gap-1.5 md:gap-4 max-h-[35vh] md:max-h-none overflow-y-auto md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                            {currentQuestion.options.map((option, index) => {
+                                const isSelected = selectedAnswer === index;
+                                const showResult = roundResult !== null;
+                                const isCorrect = showResult && index === currentQuestion.correct;
+                                const isWrong = showResult && isSelected && index !== currentQuestion.correct;
+                                
+                                let btnStyle = "bg-slate-700 border-slate-600 text-slate-300";
+                                if (isCorrect) btnStyle = "bg-green-600 border-green-500 text-white";
+                                else if (isWrong) btnStyle = "bg-red-600 border-red-500 text-white";
+                                else if (isSelected) btnStyle = "bg-cyan-700 border-cyan-500 text-white";
+
+                                return (
+                                    <button
+                                        key={index}
+                                        onClick={() => handleAnswerClick(index)}
+                                        disabled={hasAnswered}
+                                        className={`w-full p-2.5 md:p-5 rounded-lg font-medium text-left text-xs md:text-xl border transition-all flex items-center gap-2 md:gap-4 active:scale-98 ${btnStyle}`}
+                                    >
+                                        <div className="w-5 h-5 md:w-8 md:h-8 rounded bg-black/20 flex items-center justify-center text-[10px] md:text-sm font-bold shrink-0">
+                                            {String.fromCharCode(65 + index)}
+                                        </div>
+                                        <span className="flex-1">{option}</span>
+                                        {isCorrect && <CheckCircle size={14} className="shrink-0 md:w-6 md:h-6"/>}
+                                        {isWrong && <XCircle size={14} className="shrink-0 md:w-6 md:h-6"/>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* 🆕 BUG11 FIX: Tlačítko Další kolo - SKRÝT při gameOver */}
+                        {roundResult && showReadyButton && !gameOver && (
+                          <div className="space-y-2 mt-2">
+                            <button 
+                              onClick={handleReadyClick} 
+                              disabled={isReady} 
+                              className={`w-full py-3 md:py-5 font-bold uppercase rounded-lg shadow-lg border-t border-white/20 tracking-widest text-xs md:text-xl transition-all ${
+                                isReady 
+                                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                  : 'bg-orange-500 text-white animate-bounce'
+                              }`}
+                            >
+                              {isReady ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <Loader className="w-5 h-5 animate-spin" />
+                                  ČEKÁM NA SOUPEŘE...
+                                </span>
+                              ) : (
+                                'PŘIPRAVENI NA DALŠÍ OTÁZKU?'
+                              )}
+                            </button>
+                            
+                            {/* Indikátor stavu připravenosti */}
+                            <div className="flex justify-center gap-4 text-xs">
+                              <span className={`px-3 py-1 rounded-full ${isReady ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                                Ty: {isReady ? '✓ Připraven' : 'Čekám'}
+                              </span>
+                              <span className={`px-3 py-1 rounded-full ${opponentReady ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                                Soupeř: {opponentReady ? '✓ Připraven' : 'Čekám'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
+
       </div>
     </div>
   );

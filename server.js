@@ -419,11 +419,20 @@ io.on('connection', (socket) => {
         player.id = socket.id;
         player.connected = true;
         socket.join(roomCode);
+        console.log(`✅ Rejoin úspěšný: ${socket.id} -> room ${roomCode}`);
         socket.emit('game_state_sync', {
           roomCode, phase: room.phase, players: room.players, currentQuestion: room.currentQuestion, 
           ageGroup: room.ageGroup, myRole: player.role, settings: room.settings, waitingForReady: room.waitingForReady
         });
+      } else {
+        // Hráč nebyl nalezen v room
+        console.log(`❌ Rejoin failed: hráč ${oldSocketId} nenalezen v room ${roomCode}`);
+        socket.emit('rejoin_failed', { message: 'Hra již neexistuje nebo byl hráč odpojen.' });
       }
+    } else {
+      // Room neexistuje
+      console.log(`❌ Rejoin failed: room ${roomCode} neexistuje`);
+      socket.emit('rejoin_failed', { message: 'Hra již neexistuje.' });
     }
   });
 
@@ -470,6 +479,10 @@ io.on('connection', (socket) => {
   socket.on('join_as_spectator', async ({ gameCode, premiumCode }) => {
     const code = gameCode?.toUpperCase();
     const premium = premiumCode?.toUpperCase();
+    
+    console.log(`👁️ Spectator pokus o připojení: gameCode="${gameCode}" -> "${code}"`);
+    console.log(`👁️ Aktivní místnosti: [${Array.from(activeRooms.keys()).join(', ')}]`);
+    
     let isValidPremium = premium === ADMIN_PREMIUM_CODE;
     
     if (!isValidPremium) {
@@ -485,7 +498,13 @@ io.on('connection', (socket) => {
     if (!isValidPremium) { socket.emit('spectator_error', { message: 'Neplatný kód' }); return; }
     
     const room = activeRooms.get(code);
-    if (!room) { socket.emit('spectator_error', { message: 'Hra nenalezena' }); return; }
+    if (!room) { 
+      console.log(`❌ Spectator: Místnost "${code}" nenalezena v activeRooms`);
+      socket.emit('spectator_error', { message: `Hra "${code}" nenalezena. Ověř, že hra stále běží.` }); 
+      return; 
+    }
+    
+    console.log(`✅ Spectator připojen k místnosti ${code}, fáze: ${room.phase}`);
     
     socket.join(code);
     if (!spectators.has(code)) spectators.set(code, new Set());

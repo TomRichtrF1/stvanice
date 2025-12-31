@@ -14,7 +14,8 @@ import Success from './components/SuccessPage';
 import { AlertCircle, Home, RefreshCw } from 'lucide-react';
 
 /**
- * 🎮 FLOW v4.1: OPRAVY BUG10-15
+ * 🎮 FLOW v4.2: Audio fix + Rejoin timeout
+ * Založeno na funkční verzi v4.1
  */
 
 type GamePhase = 
@@ -88,8 +89,16 @@ function App() {
   // 🆕 BUG15: Stav pro opuštění hry soupeřem
   const [playerLeft, setPlayerLeft] = useState<{ reason: string; leftPlayer: string } | null>(null);
 
+  // 🆕 BUG FIX: Flag pro první interakci uživatele (audio nehraje dokud neklikne)
+  const [userHasInteracted, setUserHasInteracted] = useState(false);
+
   // === AUDIO LOGIKA ===
   useEffect(() => {
+    // 🆕 BUG FIX: Pokud uživatel ještě nekliknul, nepřehrávat nic
+    if (!userHasInteracted) {
+      return;
+    }
+
     const shouldPlayAmbient = 
       phase === 'lobby' || 
       phase === 'category_selection' ||
@@ -107,18 +116,7 @@ function App() {
     } else {
       stopAmbient();
     }
-
-    const handleUserInteraction = () => {
-      if (shouldPlayAmbient) {
-        playAmbient();
-      }
-    };
-
-    window.addEventListener('click', handleUserInteraction);
-    return () => {
-      window.removeEventListener('click', handleUserInteraction);
-    };
-  }, [phase, gameOver, playAmbient, stopAmbient, playSfx]);
+  }, [phase, userHasInteracted, gameOver, playAmbient, stopAmbient, playSfx]);
 
   // UKLÁDÁNÍ SESSION
   useEffect(() => {
@@ -146,6 +144,19 @@ function App() {
           roomCode: lastRoomCode, 
           oldSocketId: lastSocketId 
         });
+        
+        // 🆕 TIMEOUT: Pokud server neodpoví do 5 sekund, resetuj stav
+        setTimeout(() => {
+          setIsResyncing(prevState => {
+            if (prevState) {
+              console.log('⏰ Rejoin timeout - resetuji stav');
+              sessionStorage.removeItem('last_socket_id');
+              sessionStorage.removeItem('last_room_code');
+              return false;
+            }
+            return prevState;
+          });
+        }, 5000);
       }
     };
 
@@ -162,7 +173,8 @@ function App() {
       sessionStorage.removeItem('last_room_code');
       setPhase('lobby');
       setRoomCode('');
-      setError(message);
+      // 🆕 FIX: Nezobrazovat error - prostě resetovat na lobby
+      // setError(message);  // <-- ODSTRANĚNO - způsobovalo permanentní červený banner
     });
 
     socket.on('player_connection_restored', ({ playerId }) => {
@@ -410,6 +422,8 @@ function App() {
   // === HANDLERS ===
   
   const handleCreateGame = () => {
+    // 🆕 BUG FIX: Označit že uživatel interagoval - teprve teď se spustí audio
+    setUserHasInteracted(true);
     playAmbient();
     setPhase('category_selection');
   };
@@ -423,6 +437,8 @@ function App() {
   };
 
   const handleJoinGame = (code: string) => {
+    // 🆕 BUG FIX: Označit že uživatel interagoval - teprve teď se spustí audio
+    setUserHasInteracted(true);
     playAmbient();
     socket?.emit('join_game', code);
   };

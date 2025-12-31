@@ -1,9 +1,11 @@
 /**
- * 🧠 QUESTION GENERATOR - Ultimate Edition
- * Features:
- * 1. Anti-Repeat (Over-fetch & Filter)
- * 2. Fact-Checking (Perplexity/Sonar)
- * 3. Robust Database Handling
+ * 🧠 QUESTION GENERATOR - Production Edition (Full Feature Set)
+ * * FEATURES:
+ * 1. Anti-Repeat: Over-fetch & Filter (zabraňuje opakování odpovědí)
+ * 2. Fact-Checking: Perplexity/Sonar validace
+ * 3. Auto-Retry: Oprava syntaxe JSONu z LLM (3 pokusy)
+ * 4. DB Backup: Pokud selže LLM, bere se otázka z DB (Live Fallback)
+ * 5. Emergency: Pokud selže i DB, použije se hardcoded otázka
  */
 
 import Groq from 'groq-sdk';
@@ -13,11 +15,22 @@ dotenv.config();
 
 // === KONFIGURACE ===
 const GENERATOR_MODEL = "llama-3.3-70b-versatile";
-const VALIDATOR_MODEL = "sonar-pro"; // Model pro ověřování faktů
+const VALIDATOR_MODEL = "sonar-pro";
 const BATCH_SIZE = 5;       
-const DB_FETCH_BATCH = 20;  // Over-fetch pro filtrování
+const DB_FETCH_BATCH = 20;  // Over-fetch pro lepší filtrování
 const MIN_CACHE_SIZE = 3;   
 const BLACKLIST_DURATION = 3 * 60 * 60 * 1000; // 3 hodiny
+const MAX_RETRIES = 3;      // Kolikrát zkusit opravit JSON z LLM
+
+// === ZÁCHRANNÁ OTÁZKA (Poslední instance) ===
+const EMERGENCY_QUESTION = {
+  question: "Které město je hlavním městem České republiky?",
+  options: ["Brno", "Praha", "Ostrava"],
+  correct: 1,
+  _fromDb: false,
+  _fromLLM: false,
+  _emergency: true
+};
 
 // === DATABÁZE ===
 let questionDatabase = null;
@@ -28,8 +41,12 @@ export async function connectDatabase(dbModule) {
     questionDatabase = dbModule;
     const success = await questionDatabase.initDatabase();
     useDatabase = success;
-    if (success) console.log('✅ Generator: Databáze aktivní a připojená');
-    else console.log('⚠️ Generator: Databáze nedostupná (init selhal), jedeme v LLM-only módu');
+    
+    if (success) {
+      console.log('✅ Generator: Databáze aktivní a připojená');
+    } else {
+      console.log('⚠️ Generator: Databáze nedostupná (init selhal), jedeme v LLM-only módu');
+    }
     return success;
   } catch (error) {
     console.warn('⚠️ Generator: Chyba při připojování DB:', error.message);
@@ -51,12 +68,12 @@ function getGroqClient() {
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 
-// === STATISTIKY (OBNOVENO) ===
+// === STATISTIKY ===
 let validationStats = {
   generated: 0,
-  passedSelfCritique: 0, // Prošlo strukturální kontrolou
+  passedSelfCritique: 0,
   failedSelfCritique: 0,
-  passedPerplexity: 0,   // Prošlo fact-checkingem
+  passedPerplexity: 0,
   failedPerplexity: 0,
   skippedPerplexity: 0
 };
@@ -70,7 +87,7 @@ export function resetValidationStats() {
   validationHistory = [];
 }
 
-// === ANTI-REPEAT LOGIKA ===
+// === ANTI-REPEAT (GLOBAL BLACKLIST) ===
 const globalAnswerBlacklist = new Map();
 
 function normalizeText(text) {
@@ -90,7 +107,9 @@ function isAnswerBlocked(answer) {
   if (!answer) return false;
   const key = normalizeText(answer);
   const timestamp = globalAnswerBlacklist.get(key);
+  
   if (!timestamp) return false;
+  
   if (Date.now() - timestamp > BLACKLIST_DURATION) {
     globalAnswerBlacklist.delete(key);
     return false;
@@ -112,7 +131,6 @@ const gameSessions = new Map();
 class GameSession {
   constructor(gameId) {
     this.gameId = gameId;
-    this.currentRound = 0;
     this.dbCache = [];
     this.llmCache = [];
     this.llmGenerating = false;
@@ -145,24 +163,23 @@ export function getAgeGroups() {
   return Object.entries(AGE_GROUP_CONFIG).map(([key, config]) => ({ key, ...config }));
 }
 
-// === FACT CHECKING (PERPLEXITY SONAR) - OBNOVENO ===
+// === FACT CHECKING (SONAR) ===
 async function validateWithSonar(questionData) {
   if (!PERPLEXITY_API_KEY) {
     validationStats.skippedPerplexity++;
-    return true; // Bez klíče propouštíme (fallback)
+    return true; 
   }
 
   const correctAnswer = questionData.options[questionData.correct];
-  
   const prompt = `
-    Jsi přísný fact-checker. Ověř tuto kvízovou otázku:
+    Jsi fact-checker. Ověř tuto kvízovou otázku:
     Otázka: "${questionData.question}"
     Možnosti: ${JSON.stringify(questionData.options)}
-    Správná odpověď (index ${questionData.correct}): "${correctAnswer}"
+    Správná odpověď: "${correctAnswer}"
     
     Pravidla:
-    1. Je označená odpověď fakticky SPRÁVNÁ?
-    2. Jsou ostatní možnosti fakticky NESPRÁVNÉ?
+    1. Je odpověď fakticky SPRÁVNÁ?
+    2. Jsou ostatní možnosti NESPRÁVNÉ?
     3. Je otázka jednoznačná?
     
     Odpověz POUZE JSON: {"valid": true} nebo {"valid": false, "reason": "důvod"}
@@ -186,7 +203,7 @@ async function validateWithSonar(questionData) {
     if (data.error) { 
         console.warn("Perplexity API Error:", data.error);
         validationStats.skippedPerplexity++; 
-        return true; // Při chybě API raději pustíme, než abychom neměli nic
+        return true;
     }
 
     const content = data.choices[0].message.content;
@@ -197,11 +214,10 @@ async function validateWithSonar(questionData) {
     
     if (result.valid) {
       validationStats.passedPerplexity++;
-      // console.log(`✅ Validated: "${questionData.question.substring(0,30)}..."`);
       return true;
     } else {
       validationStats.failedPerplexity++;
-      console.log(`❌ Rejected: "${questionData.question}" - ${result.reason}`);
+      console.log(`❌ Rejected by Sonar: "${questionData.question}" - ${result.reason}`);
       validationHistory.push({ ...questionData, status: 'REJECTED', reason: result.reason });
       return false;
     }
@@ -215,23 +231,35 @@ async function validateWithSonar(questionData) {
 // === FILTRACE (ANTI-REPEAT) ===
 function filterQuestions(questions, session) {
   if (!questions || questions.length === 0) return [];
+  
   return questions.filter(q => {
     const answer = q.options[q.correct];
+    
+    // 1. Kontrola globálního blacklistu
     if (isAnswerBlocked(answer)) return false;
+    
+    // 2. Kontrola lokální historie
     if (session && session.isAnswerUsed(answer)) return false;
+    
     return true;
   });
 }
 
-// === GENERACE Z LLM ===
-async function generateBatchFromLLM(ageGroup, gameSession) {
+// === GENERACE Z LLM (S Retry a Fallbacky) ===
+async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
   const client = getGroqClient();
   if (!client) return [];
+
+  // Stop condition pro rekurzi
+  if (retryCount >= MAX_RETRIES) {
+    console.warn(`⚠️ LLM Retry limit (${MAX_RETRIES}) dosažen.`);
+    return [];
+  }
 
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
   
   const prompt = `
-    Vytvoř 5 českých kvízových otázek pro kategorii: ${config.name}.
+    Vytvoř 5 kvízových otázek pro kategorii: ${config.name}.
     Formát JSON: [{"question": "...", "options": ["A", "B", "C"], "correct": 0}]
     Odpovědi max 3 slova. Index correct je 0, 1 nebo 2.
     Vrať POUZE čistý JSON pole, nic víc.
@@ -246,23 +274,35 @@ async function generateBatchFromLLM(ageGroup, gameSession) {
 
     const content = response.choices[0].message.content;
     const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
     
-    const rawQuestions = JSON.parse(jsonMatch[0]);
+    // 🔄 RETRY: Pokud model nevrátil JSON
+    if (!jsonMatch) {
+      console.warn(`⚠️ LLM syntax error (pokus ${retryCount+1}). Zkouším znovu...`);
+      return generateBatchFromLLM(ageGroup, gameSession, retryCount + 1);
+    }
+    
+    let rawQuestions;
+    try {
+      rawQuestions = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      // 🔄 RETRY: Pokud JSON nejde parsovat
+      console.warn(`⚠️ JSON Parse Error (pokus ${retryCount+1}). Zkouším znovu...`);
+      return generateBatchFromLLM(ageGroup, gameSession, retryCount + 1);
+    }
+
     validationStats.generated += rawQuestions.length;
 
-    // 1. Validace struktury
+    // Struktura
     const structurallyValid = rawQuestions.filter(q => 
       q.question && Array.isArray(q.options) && q.options.length === 3 && typeof q.correct === 'number'
     );
     
-    // 2. Anti-Repeat Filtr (okamžitě vyhodit duplicity)
+    // Anti-Repeat
     const uniqueQuestions = filterQuestions(structurallyValid, gameSession);
     
-    // 3. Fact-Checking (Perplexity) - Pouze pro unikátní otázky
+    // Fact-Checking
     const finalQuestions = [];
     for (const q of uniqueQuestions) {
-        // Validujeme sériově (nebo paralelně Promise.all, ale sériově šetříme Rate Limit)
         const isValid = await validateWithSonar(q);
         if (isValid) finalQuestions.push(q);
     }
@@ -270,31 +310,29 @@ async function generateBatchFromLLM(ageGroup, gameSession) {
     // Uložení do DB
     if (useDatabase && questionDatabase && finalQuestions.length > 0) {
        questionDatabase.saveQuestions(finalQuestions, config.mode, config.difficulty)
-         .catch(err => console.error("Save error:", err.message));
+         .catch(err => console.error("Save error (nevadí):", err.message));
     }
 
     return finalQuestions;
+
   } catch (error) {
     console.error("LLM Error:", error.message);
     return [];
   }
 }
 
-// === DB CACHE REFILL (S FILTREM) ===
+// === DB CACHE REFILL (Over-fetch strategy) ===
 async function refillDbCache(session, ageGroup) {
   if (!useDatabase || !questionDatabase) return;
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
 
   try {
-    // Over-fetch 20 otázek
     const candidates = await questionDatabase.getQuestionsWithRotation(
       config.mode, null, config.difficulty, DB_FETCH_BATCH, []
     );
-
-    // Filtr (zde NEVOLÁME Perplexity, protože v DB by už měly být ověřené)
     const cleanQuestions = filterQuestions(candidates, session);
-
     const toAdd = cleanQuestions.slice(0, 5);
+    
     if (toAdd.length > 0) {
       session.dbCache.push(...toAdd);
     }
@@ -310,7 +348,7 @@ export async function preWarmCache(gameId, ageGroup) {
   
   console.log(`🔥 Pre-warming cache pro ${gameId} (${ageGroup})`);
 
-  // DB část
+  // 1. DB PRE-WARM
   if (useDatabase && questionDatabase) {
     try {
       const candidates = await questionDatabase.getQuestionsWithRotation(
@@ -320,11 +358,11 @@ export async function preWarmCache(gameId, ageGroup) {
       session.dbCache = cleanQuestions.slice(0, 5);
       console.log(`   -> DB Cache: ${session.dbCache.length} čistých otázek`);
     } catch (e) {
-      console.warn("   -> DB fetch error");
+      console.warn("   -> DB fetch error (ignorován)");
     }
   }
 
-  // LLM část
+  // 2. LLM PRE-WARM
   startBackgroundGeneration(session, ageGroup);
 }
 
@@ -347,23 +385,23 @@ export async function generateQuestion(gameId, ageGroup = 'adult') {
   
   let question = null;
 
-  // 1. LLM Cache
+  // 1. Zkusíme LLM Cache
   if (session.llmCache.length > 0) {
     question = session.llmCache.shift();
     if (session.llmCache.length < MIN_CACHE_SIZE) startBackgroundGeneration(session, ageGroup);
   }
 
-  // 2. DB Cache
+  // 2. Pokud není LLM, zkusíme DB Cache
   if (!question && session.dbCache.length > 0) {
     question = session.dbCache.shift();
   }
   
-  // Doplňování DB
+  // Doplňování DB cache
   if (useDatabase && questionDatabase && session.dbCache.length < MIN_CACHE_SIZE) {
      refillDbCache(session, ageGroup).catch(() => {});
   }
 
-  // 3. Live Generace
+  // 3. Live Generace (S Retry)
   if (!question) {
     console.log("⚠️ Cache prázdná, generuji live...");
     const fresh = await generateBatchFromLLM(ageGroup, session);
@@ -374,13 +412,34 @@ export async function generateQuestion(gameId, ageGroup = 'adult') {
     }
   }
 
-  // 4. Finální kontrola a blokace
+  // 4. 🚑 DB LIVE FALLBACK (Obnoveno)
+  // Pokud LLM (i po retry) selhalo, zkusíme ještě jednou sáhnout přímo do DB
+  if (!question && useDatabase && questionDatabase) {
+    console.warn("⚠️ LLM selhalo. Zkouším DB Live Fallback...");
+    try {
+      const candidates = await questionDatabase.getQuestionsWithRotation(config.mode, null, config.difficulty, DB_FETCH_BATCH, []);
+      const clean = filterQuestions(candidates, session);
+      if (clean.length > 0) {
+        question = clean[0]; // Bereme první čistou
+        question._fromDb = true;
+        // Zbytek uložíme do cache
+        if (clean.length > 1) {
+            session.dbCache.push(...clean.slice(1, 5));
+        }
+        console.log("✅ Zachráněno z DB.");
+      }
+    } catch (e) {
+      console.error("DB Fallback failed:", e.message);
+    }
+  }
+
+  // 5. Finální kontrola a blokace
   if (question) {
     const answer = question.options[question.correct];
     
-    // Last-minute check (pokud se mezitím zablokovala)
+    // Last minute skip (dvojitá pojistka)
     if (isAnswerBlocked(answer) || session.isAnswerUsed(answer)) {
-       console.log(`♻️ Last minute skip: "${answer}". Hledám jinou.`);
+       console.log(`♻️ Last minute skip: "${answer}". Zkouším znovu.`);
        return generateQuestion(gameId, ageGroup);
     }
 
@@ -394,13 +453,7 @@ export async function generateQuestion(gameId, ageGroup = 'adult') {
     return question;
   }
 
-  // 5. Panic Mode
-  console.error("❌ CRITICAL: Panic question!");
-  return {
-    question: "Systémová chyba: Nelze načíst otázku. Kdo vyhrává?",
-    options: ["Lovec", "Štvanec", "Nikdo"],
-    correct: 2,
-    _error: true,
-    _fromLLM: false
-  };
+  // 6. 🚑 EMERGENCY FALLBACK (Proti bílé obrazovce)
+  console.error("❌ CRITICAL: Total failure. Using EMERGENCY QUESTION.");
+  return { ...EMERGENCY_QUESTION };
 }
