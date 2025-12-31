@@ -150,7 +150,14 @@ export function endGameSession(gameId) { gameSessions.delete(gameId); }
 export function resetGameSession(gameId) { gameSessions.delete(gameId); }
 export function getCacheStatus(gameId) {
   const s = gameSessions.get(gameId);
-  return { generated: s ? s.llmCache.length + s.dbCache.length : 0, target: 5 };
+  if (!s) return { generated: 0, target: 5, ready: false };
+  
+  const total = s.llmCache.length + s.dbCache.length;
+  return { 
+    generated: Math.min(total, 5),
+    target: 5,
+    ready: total >= 5
+  };
 }
 
 const AGE_GROUP_CONFIG = {
@@ -171,19 +178,39 @@ async function validateWithSonar(questionData) {
   }
 
   const correctAnswer = questionData.options[questionData.correct];
-  const prompt = `
-    Jsi fact-checker. Ověř tuto kvízovou otázku:
-    Otázka: "${questionData.question}"
-    Možnosti: ${JSON.stringify(questionData.options)}
-    Správná odpověď: "${correctAnswer}"
-    
-    Pravidla:
-    1. Je odpověď fakticky SPRÁVNÁ?
-    2. Jsou ostatní možnosti NESPRÁVNÉ?
-    3. Je otázka jednoznačná?
-    
-    Odpověz POUZE JSON: {"valid": true} nebo {"valid": false, "reason": "důvod"}
-  `;
+  const otherOptions = questionData.options.filter((_, i) => i !== questionData.correct);
+  
+  const prompt = `Jsi FACT-CHECKER kvízových otázek. Ověř POUZE faktickou správnost.
+
+OTÁZKA: "${questionData.question}"
+OZNAČENÁ SPRÁVNÁ ODPOVĚĎ: "${correctAnswer}"
+OSTATNÍ MOŽNOSTI: ${otherOptions.join(", ")}
+
+═══════════════════════════════════════════════════════════
+KONTROLUJ POUZE:
+═══════════════════════════════════════════════════════════
+
+1. Je "${correctAnswer}" FAKTICKY SPRÁVNÁ odpověď?
+2. Jsou "${otherOptions.join('" a "')}" FAKTICKY ŠPATNÉ?
+3. Nemůže být správná i jiná z nabízených možností?
+
+═══════════════════════════════════════════════════════════
+PRAVIDLA TOLERANCE:
+═══════════════════════════════════════════════════════════
+- IGNORUJ okrajové případy a teoretické výjimky
+- IGNORUJ vědecké nuance
+- Hodnoť z pohledu běžného kvízu
+
+═══════════════════════════════════════════════════════════
+VÝSTUP (pouze JSON):
+═══════════════════════════════════════════════════════════
+SCHVÁLENÍ: {"valid": true}
+ZAMÍTNUTÍ: {"valid": false, "reason": "konkrétní důvod (max 10 slov)"}
+
+Důvody zamítnutí:
+- "Fakticky špatná odpověď: [správná je X]"
+- "Více správných: [která další]"
+- "Odpověď X je také správná"`;
 
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
@@ -245,6 +272,148 @@ function filterQuestions(questions, session) {
   });
 }
 
+/**
+ * 🎯 PROMPT BUILDER - generuje specifický prompt podle věkové kategorie
+ */
+function buildPromptForAgeGroup(ageGroup, config) {
+  // Témata pro rotaci (zabraňuje opakování stejných témat)
+  const ADULT_TOPICS = [
+    "česká a světová historie",
+    "světová literatura a autoři",
+    "zeměpis a hlavní města",
+    "přírodní vědy a objevy",
+    "klasická hudba a skladatelé",
+    "film a režiséři",
+    "sport a olympijské hry",
+    "umění a malíři"
+  ];
+  
+  const KID_TOPICS = [
+    "zvířata a jejich vlastnosti",
+    "pohádky a dětské příběhy",
+    "základní matematika",
+    "barvy a tvary",
+    "roční období a počasí"
+  ];
+
+  // Náhodné téma pro variabilitu
+  const topics = ageGroup === 'adult' ? ADULT_TOPICS : KID_TOPICS;
+  const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+
+  if (ageGroup === 'adult') {
+    return `Jsi expert na tvorbu NÁROČNÝCH kvízových otázek pro vědomostní soutěže (AZ-kvíz, Riskuj!).
+
+TÉMA: ${randomTopic}
+JAZYK: Čeština (gramaticky správně!)
+
+═══════════════════════════════════════════════════════════
+PRAVIDLA PRO GENEROVÁNÍ
+═══════════════════════════════════════════════════════════
+
+1. OBTÍŽNOST - otázky musí testovat ZNALOSTI, ne zdravý rozum
+2. JEDNOZNAČNOST - právě JEDNA odpověď musí být správná
+3. DISTRAKTORY - špatné odpovědi musí být uvěřitelné, ale jasně špatné
+
+═══════════════════════════════════════════════════════════
+❌ NEGENERUJ (triviální/příliš snadné):
+═══════════════════════════════════════════════════════════
+"Jakou barvu má tráva/obloha/krev?"
+"Kolik nohou má pes?"
+"Hlavní město Francie/Německa/Itálie?" (příliš známé)
+"Kdo napsal Babičku?" (každý Čech zná)
+"Kolik dní má týden?"
+"Kde žije lední medvěd?"
+"Ve které zemi jsou pyramidy?" (Egypt - moc snadné)
+
+═══════════════════════════════════════════════════════════
+❌ NEGENERUJ (nejednoznačné/více správných odpovědí):
+═══════════════════════════════════════════════════════════
+"Kdo objevil Ameriku?" (Kolumbus i Vikingové)
+"Co je symbol Vánoc?" (stromek, betlém, hvězda...)
+"Kdo byl slavný vědec?" (příliš obecné)
+"Která barva je teplá?" (červená, oranžová, žlutá)
+
+═══════════════════════════════════════════════════════════
+✅ GENERUJ OTÁZKY TOHOTO TYPU:
+═══════════════════════════════════════════════════════════
+
+HISTORIE:
+"Ve kterém roce byla podepsána Mnichovská dohoda?" → 1938
+"Který římský císař nechal postavit Koloseum?" → Vespasián
+"Ve které bitvě zemřel Jan Lucemburský?" → Kresčak
+"Jak se jmenoval první československý prezident?" → T.G. Masaryk
+
+ZEMĚPIS:
+"Která řeka protéká nejvíce státy světa?" → Dunaj
+"Jaké je hlavní město Myanmaru?" → Naypyidaw
+"Ve které zemi leží poušť Atacama?" → Chile
+"Který průliv odděluje Evropu od Afriky?" → Gibraltarský
+
+VĚDA:
+"Který prvek má v periodické tabulce značku W?" → Wolfram
+"Jak se nazývá nejmenší kost v lidském těle?" → Třmínek
+"Kdo objevil penicilin?" → Alexander Fleming
+"Jaká je chemická značka zlata?" → Au
+
+UMĚNÍ A LITERATURA:
+"Který malíř namaloval Guernici?" → Pablo Picasso
+"Kdo zkomponoval operu Rusalka?" → Antonín Dvořák
+"Ve kterém městě se nachází muzeum Prado?" → Madrid
+"Kdo napsal Mistr a Markétka?" → Michail Bulgakov
+
+SPORT:
+"Ve kterém roce se konaly první zimní OH?" → 1924
+"Kolik hráčů má volejbalové družstvo na hřišti?" → 6
+"Ve kterém roce vyhráli čeští hokejisté v Naganu?" → 1998
+
+═══════════════════════════════════════════════════════════
+FORMÁT VÝSTUPU
+═══════════════════════════════════════════════════════════
+Vrať POUZE JSON pole (žádný další text):
+[
+  {"question": "...", "options": ["A", "B", "C"], "correct": 0},
+  ...
+]
+
+- Přesně 5 otázek
+- Každá má přesně 3 možnosti
+- "correct" = index správné odpovědi (0, 1, nebo 2)
+- Odpovědi max 4 slova
+- Otázky MUSÍ končit otazníkem`;
+  } 
+  
+  else if (ageGroup === 'student') {
+    return `Jsi expert na tvorbu kvízových otázek pro STŘEDOŠKOLÁKY v ČEŠTINĚ.
+
+KATEGORIE: Školáci (12-18 let)
+TÉMA: ${randomTopic}
+
+PRAVIDLA:
+- Otázky přiměřené věku 12-18 let
+- Mohou být z učiva ZŠ/SŠ
+- Ne příliš jednoduché, ne příliš těžké
+- PRÁVĚ JEDNA odpověď musí být správná
+
+FORMÁT: JSON pole [{"question": "...", "options": ["A", "B", "C"], "correct": 0}]
+Vytvoř 5 otázek. Vrať POUZE JSON.`;
+  }
+  
+  else { // kids
+    return `Jsi expert na tvorbu JEDNODUCHÝCH kvízových otázek pro DĚTI v ČEŠTINĚ.
+
+KATEGORIE: Děti (6-12 let)
+TÉMA: ${randomTopic}
+
+PRAVIDLA:
+- Otázky musí být JEDNODUCHÉ a zábavné
+- Vhodné pro děti základní školy
+- Témata: zvířata, pohádky, příroda, základní fakta
+
+FORMÁT: JSON pole [{"question": "...", "options": ["A", "B", "C"], "correct": 0}]
+Vytvoř 5 otázek. Vrať POUZE JSON.`;
+  }
+}
+
 // === GENERACE Z LLM (S Retry a Fallbacky) ===
 async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
   const client = getGroqClient();
@@ -258,12 +427,8 @@ async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
 
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
   
-  const prompt = `
-    Vytvoř 5 kvízových otázek pro kategorii: ${config.name}.
-    Formát JSON: [{"question": "...", "options": ["A", "B", "C"], "correct": 0}]
-    Odpovědi max 3 slova. Index correct je 0, 1 nebo 2.
-    Vrať POUZE čistý JSON pole, nic víc.
-  `;
+  // 🆕 VYLEPŠENÝ PROMPT podle věkové kategorie
+  const prompt = buildPromptForAgeGroup(ageGroup, config);
 
   try {
     const response = await client.chat.completions.create({
@@ -292,13 +457,63 @@ async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
 
     validationStats.generated += rawQuestions.length;
 
-    // Struktura
+    // 1. Strukturální validace
     const structurallyValid = rawQuestions.filter(q => 
       q.question && Array.isArray(q.options) && q.options.length === 3 && typeof q.correct === 'number'
     );
     
-    // Anti-Repeat
-    const uniqueQuestions = filterQuestions(structurallyValid, gameSession);
+    // 2. 🆕 Kontrola obtížnosti (pro dospělé) - filtruje triviální otázky
+    const difficultyFiltered = structurallyValid.filter(q => {
+      if (ageGroup !== 'adult') return true; // Pro děti nefiltrujeme
+      
+      const question = q.question.toLowerCase();
+      
+      // Vzory triviálních otázek
+      const trivialPatterns = [
+        // Triviální (zná každé dítě)
+        /jakou barvu má/i,
+        /jaké barvy je/i,
+        /kolik (má|dní|měsíců|hodin|minut)/i,
+        /kolik nohou má/i,
+        /kolik je \d+\s*[+\-*/]\s*\d+/i,
+        /je .+ (zelená|červená|modrá|žlutá)/i,
+        /která zelenina/i,
+        /které ovoce/i,
+        /je mrkev/i,
+        /je slunce/i,
+        /kolik má týden/i,
+        /kolik má rok/i,
+        /kde žije lední medvěd/i,
+        /co pije kráva/i,
+        /jaký zvuk dělá/i,
+        
+        // Příliš snadné pro dospělé
+        /kdo napsal babičku/i,
+        /hlavní město (francie|německa|itálie|anglie|španělska)\?/i,
+        /ve které zemi jsou pyramidy/i,
+        /kdo je na českých korunách/i,
+      ];
+      
+      for (const pattern of trivialPatterns) {
+        if (pattern.test(question)) {
+          console.log(`   🚫 Triviální otázka vyfiltrována: "${question.substring(0, 50)}..."`);
+          return false;
+        }
+      }
+      
+      // Otázka příliš krátká = pravděpodobně triviální
+      if (question.length < 20) {
+        console.log(`   🚫 Příliš krátká otázka: "${question}"`);
+        return false;
+      }
+      
+      return true;
+    });
+    
+    console.log(`📊 Kontrola obtížnosti: ${difficultyFiltered.length}/${structurallyValid.length} prošlo`);
+    
+    // 3. Anti-Repeat
+    const uniqueQuestions = filterQuestions(difficultyFiltered, gameSession);
     
     // Fact-Checking
     const finalQuestions = [];

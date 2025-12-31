@@ -225,17 +225,20 @@ export default function GameBoard({
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col md:flex-row overflow-hidden">
       
-      {/* Hlavička s rolí - mobilní verze - KOMPAKTNÍ */}
-      <div className="shrink-0 bg-slate-800/90 p-1.5 shadow-lg z-20 flex justify-between items-center md:hidden border-b border-slate-700">
-        <div className={`flex items-center gap-1 px-2 py-1 rounded border ${myRole === 'hunter' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'bg-green-500/20 border-green-500/50 text-green-400'}`}>
+      {/* Hlavička s rolí - mobilní verze - RESPONSIVNÍ */}
+      <div className="shrink-0 bg-slate-800/90 p-1.5 shadow-lg z-20 flex justify-between items-center md:hidden border-b border-slate-700 gap-2 overflow-hidden">
+        <div className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded border ${myRole === 'hunter' ? 'bg-red-500/20 border-red-500/50 text-red-400' : 'bg-green-500/20 border-green-500/50 text-green-400'}`}>
           {myRole === 'hunter' ? <Target size={14} /> : <User size={14} />}
-          <span className="text-[10px] font-bold uppercase">{myRole === 'hunter' ? 'Lovec' : 'Štvanec'}</span>
+          <span className="text-[10px] font-bold uppercase whitespace-nowrap">
+            <span className="hidden min-[360px]:inline">Jsi </span>
+            {myRole === 'hunter' ? 'Lovec' : 'Štvanec'}
+          </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-cyan-400 font-mono">{roomCode}</span>
-          <div className="flex items-center gap-0.5 px-1 py-0.5 bg-slate-700/50 rounded text-[9px]">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[9px] text-cyan-400 font-mono truncate">{roomCode}</span>
+          <div className="flex-shrink-0 flex items-center gap-0.5 px-1 py-0.5 bg-slate-700/50 rounded text-[9px]">
             {gameMode === 'kid' ? <Baby size={10} className="text-pink-400"/> : <Brain size={10} className="text-cyan-400"/>}
-            <span className="text-slate-400">{gameMode === 'kid' ? 'Jr' : 'Dosp'}</span>
+            <span className="text-slate-400 hidden min-[400px]:inline">{gameMode === 'kid' ? 'Jr' : 'Dosp'}</span>
           </div>
         </div>
       </div>
@@ -245,21 +248,21 @@ export default function GameBoard({
         {/* === HERNÍ PLÁN === */}
         <div className="flex-1 flex flex-col min-h-0 bg-slate-800/30 md:p-8 p-3 overflow-y-auto md:overflow-visible relative">
             
-            {/* Desktop: Hlavička s rolí - ZMENŠENÁ */}
-            <div className="hidden md:flex justify-between items-center mb-4">
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${myRole === 'hunter' ? 'bg-red-500/20 border-red-500/70 text-red-400' : 'bg-green-500/20 border-green-500/70 text-green-400'}`}>
+            {/* Desktop: Hlavička s rolí - RESPONSIVNÍ */}
+            <div className="hidden md:flex justify-between items-center mb-4 gap-3 overflow-hidden">
+                <div className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg border ${myRole === 'hunter' ? 'bg-red-500/20 border-red-500/70 text-red-400' : 'bg-green-500/20 border-green-500/70 text-green-400'}`}>
                   {myRole === 'hunter' ? <Target size={18} /> : <User size={18} />}
-                  <span className="text-sm font-bold uppercase">{myRole === 'hunter' ? 'Jsi Lovec' : 'Jsi Štvanec'}</span>
+                  <span className="text-sm font-bold uppercase whitespace-nowrap">{myRole === 'hunter' ? 'Jsi Lovec' : 'Jsi Štvanec'}</span>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   {/* Kód místnosti */}
-                  <span className="text-slate-400 text-xs font-mono">
+                  <span className="text-slate-400 text-xs font-mono truncate">
                     Kód: <span className="text-cyan-400 font-bold">{roomCode}</span>
                   </span>
                   {/* Režim */}
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-700/50 rounded border border-slate-600">
+                  <div className="flex-shrink-0 flex items-center gap-1.5 px-2 py-1 bg-slate-700/50 rounded border border-slate-600">
                     {gameMode === 'kid' ? <Baby size={14} className="text-pink-400"/> : <Brain size={14} className="text-cyan-400"/>}
-                    <span className="text-slate-300 text-xs font-semibold">{gameMode === 'kid' ? 'Junior' : 'Dospělí'}</span>
+                    <span className="text-slate-300 text-xs font-semibold whitespace-nowrap">{gameMode === 'kid' ? 'Junior' : 'Dospělí'}</span>
                   </div>
                 </div>
             </div>
