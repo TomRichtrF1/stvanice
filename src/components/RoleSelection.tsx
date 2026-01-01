@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Target, User, Eye, Ticket, Loader, Check, X } from 'lucide-react';
+import { Target, User, Eye, Ticket, Check, X } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
+
+// Stripe Payment Link - cena 139 Kč/měsíc
+const STRIPE_CHECKOUT_URL = 'https://buy.stripe.com/bJebJ15E3bXs7DG8l25wI01';
 
 interface RoleSelectionProps {
   onSelectRole: (role: 'hunter' | 'prey') => void;
@@ -29,7 +32,6 @@ export default function RoleSelection({
   roomCode
 }: RoleSelectionProps) {
   const { socket } = useSocket();
-  const [isLoading, setIsLoading] = useState(false);
   const [roleTakenError, setRoleTakenError] = useState<string | null>(null);
   
   // 🆕 Sledování obsazených rolí druhým hráčem
@@ -60,26 +62,6 @@ export default function RoleSelection({
       socket.off('roles_updated', handleRolesUpdated);
     };
   }, [socket]);
-
-  // 🎫 Handler pro nákup vstupenky
-  const handleBuyTicket = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
-      const data = await response.json();
-      
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (error) {
-      console.error('Chyba při vytváření platby:', error);
-      setIsLoading(false);
-    }
-  };
 
   // Získej info o kategorii
   const categoryInfo = AGE_GROUP_LABELS[ageGroup] || AGE_GROUP_LABELS.adult;
@@ -282,21 +264,16 @@ export default function RoleSelection({
               Chcete, aby diváci mohli sledovat vaši hru na projektoru nebo TV?
             </p>
             
-            <button
-              onClick={handleBuyTicket}
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:from-slate-700 disabled:to-slate-700 text-white font-bold py-3 px-6 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+            <a
+              href={STRIPE_CHECKOUT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold py-3 px-6 rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
             >
-              {isLoading ? (
-                <Loader className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <Ticket className="w-5 h-5" />
-                  <span>KOUPIT VSTUPENKU</span>
-                  <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">139 Kč/měsíc</span>
-                </>
-              )}
-            </button>
+              <Ticket className="w-5 h-5" />
+              <span>KOUPIT VSTUPENKU</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">139 Kč/měsíc</span>
+            </a>
             
             <p className="text-slate-500 text-xs mt-2 text-center">
               Jednorázová platba, bez automatického obnovování

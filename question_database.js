@@ -87,6 +87,17 @@ export async function initDatabase() {
         CREATE INDEX IF NOT EXISTS idx_tickets_code ON spectator_tickets(code);
       `);
       
+      // 🆕 Tabulka pro globální rotaci témat (100 témat bez opakování)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS topic_rotation (
+          id SERIAL PRIMARY KEY,
+          topic TEXT NOT NULL UNIQUE,
+          used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_topic_rotation_topic ON topic_rotation(topic);
+      `);
+      
       // Zjisti počet otázek v DB
       const countResult = await client.query('SELECT COUNT(*) FROM questions');
       const questionCount = parseInt(countResult.rows[0].count);
@@ -421,4 +432,47 @@ export async function verifyTicketCode(code) {
  */
 export function closeDatabase() {
   pool.end();
+}
+
+// === TOPIC ROTATION (Globální rotace 100 témat) ===
+
+/**
+ * 🆕 Získá seznam všech použitých témat
+ * @returns {Promise<string[]>} - Pole použitých témat
+ */
+export async function getUsedTopics() {
+  try {
+    const res = await pool.query('SELECT topic FROM topic_rotation');
+    return res.rows.map(r => r.topic);
+  } catch (e) {
+    console.error('getUsedTopics error:', e.message);
+    return [];
+  }
+}
+
+/**
+ * 🆕 Označí téma jako použité
+ * @param {string} topic - Název tématu
+ */
+export async function markTopicUsed(topic) {
+  try {
+    await pool.query(
+      'INSERT INTO topic_rotation (topic) VALUES ($1) ON CONFLICT (topic) DO NOTHING',
+      [topic]
+    );
+  } catch (e) {
+    console.error('markTopicUsed error:', e.message);
+  }
+}
+
+/**
+ * 🆕 Resetuje rotaci témat (vymaže všechna použitá)
+ */
+export async function resetTopicRotation() {
+  try {
+    const res = await pool.query('DELETE FROM topic_rotation');
+    console.log(`🔄 Topic rotation reset: vymazáno ${res.rowCount} témat`);
+  } catch (e) {
+    console.error('resetTopicRotation error:', e.message);
+  }
 }

@@ -89,6 +89,9 @@ function App() {
   // 🆕 BUG15: Stav pro opuštění hry soupeřem
   const [playerLeft, setPlayerLeft] = useState<{ reason: string; leftPlayer: string } | null>(null);
 
+  // 🆕 Stav pro chybu při připojování do místnosti
+  const [joinError, setJoinError] = useState<string | null>(null);
+
   // 🆕 BUG FIX: Flag pro první interakci uživatele (audio nehraje dokud neklikne)
   const [userHasInteracted, setUserHasInteracted] = useState(false);
 
@@ -295,6 +298,12 @@ function App() {
       setTimeout(() => setError(null), 3000);
     });
 
+    // 🆕 Handler pro chybu při připojování do místnosti
+    socket.on('join_error', ({ message }) => {
+      console.log('❌ Join error:', message);
+      setJoinError(message);
+    });
+
     socket.on('player_disconnected', () => { 
       setDisconnected(true);
       sessionStorage.removeItem('last_socket_id');
@@ -368,6 +377,7 @@ function App() {
       socket.off('next_question'); 
       socket.off('game_over');
       socket.off('error'); 
+      socket.off('join_error');
       socket.off('player_disconnected');
       socket.off('start_resolution');
       socket.off('player_connection_unstable');
@@ -516,6 +526,34 @@ function App() {
             >
               <Home size={24} />
               ZALOŽIT NOVOU HRU
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 🆕 Obrazovka pro chybu při připojování do místnosti
+  if (joinError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-6 text-center animate-fade-in">
+          <AlertCircle className="w-20 h-20 text-red-500 mx-auto" />
+          <h2 className="text-3xl font-bold text-white">Místnost nenalezena</h2>
+          <p className="text-slate-400">{joinError}</p>
+          <div className="space-y-3">
+            <button 
+              onClick={() => setJoinError(null)}
+              className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl shadow-lg shadow-cyan-500/50 flex items-center justify-center gap-3"
+            >
+              ZADAT JINÝ KÓD
+            </button>
+            <button 
+              onClick={() => { setJoinError(null); setPhase('lobby'); }}
+              className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-8 rounded-xl text-xl flex items-center justify-center gap-3"
+            >
+              <Home size={24} />
+              ZPĚT NA ÚVODNÍ STRÁNKU
             </button>
           </div>
         </div>

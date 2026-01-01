@@ -18,7 +18,7 @@ const GENERATOR_MODEL = "llama-3.3-70b-versatile";
 const VALIDATOR_MODEL = "sonar-pro";
 const BATCH_SIZE = 5;       
 const DB_FETCH_BATCH = 20;  // Over-fetch pro lepší filtrování
-const MIN_CACHE_SIZE = 3;   
+const MIN_CACHE_SIZE = 5;   // 🆕 Zvýšeno pro lepší pre-generování   
 const BLACKLIST_DURATION = 3 * 60 * 60 * 1000; // 3 hodiny
 const MAX_RETRIES = 3;      // Kolikrát zkusit opravit JSON z LLM
 
@@ -143,14 +143,12 @@ class GameSession {
 
 /**
  * 🔄 LOGIKA STŘÍDÁNÍ LLM/DB
- * Kolo 1-3:  LLM
- * Kolo 4-5:  DB
- * Kolo 6+:   Střídání (sudé = LLM, liché = DB)
+ * Pravidelné střídání: LLM, DB, LLM, DB...
+ * Liché kolo = LLM (1, 3, 5, 7...)
+ * Sudé kolo = DB (2, 4, 6, 8...)
  */
 function shouldUseLLM(round) {
-  if (round <= 3) return true;   // Kola 1-3: LLM
-  if (round <= 5) return false;  // Kola 4-5: DB
-  return round % 2 === 0;        // 6+: sudé=LLM, liché=DB
+  return round % 2 === 1;  // Liché = LLM, Sudé = DB
 }
 
 function getGameSession(gameId) {
@@ -179,8 +177,182 @@ const AGE_GROUP_CONFIG = {
   kids: { name: "🐣 Děti", mode: 'kid', difficulty: 'easy' }
 };
 
+// === 100 TÉMAT PRO GLOBÁLNÍ ROTACI ===
+const ALL_TOPICS = [
+  // Historie (20 témat)
+  "české dějiny 20. století",
+  "první světová válka",
+  "druhá světová válka",
+  "starověký Řím",
+  "starověké Řecko",
+  "středověká Evropa",
+  "habsburská monarchie",
+  "Přemyslovci a Lucemburkové",
+  "francouzská revoluce",
+  "americká válka za nezávislost",
+  "ruská revoluce a SSSR",
+  "studená válka",
+  "kolonialismus a dekolonizace",
+  "renesance a reformace",
+  "starověký Egypt",
+  "Vikingové a severské dějiny",
+  "byzantská říše",
+  "osmanská říše",
+  "dějiny Číny",
+  "průmyslová revoluce",
+  
+  // Zeměpis (15 témat)
+  "hlavní města světa (méně známá)",
+  "řeky a jezera světa",
+  "pohoří a nejvyšší hory",
+  "ostrovy a souostroví",
+  "pouště světa",
+  "evropské státy a regiony",
+  "asijské státy",
+  "africké státy",
+  "státy Ameriky",
+  "Oceánie a Austrálie",
+  "průlivy, průplavy a zálivy",
+  "národní parky světa",
+  "vulkány a tektonické zóny",
+  "polární oblasti",
+  "světové metropole",
+  
+  // Přírodní vědy (20 témat)
+  "chemické prvky a periodická tabulka",
+  "lidské tělo a anatomie",
+  "astronomie a hvězdy",
+  "fyzikální zákony a konstanty",
+  "botanika a rostliny",
+  "savci světa",
+  "ptáci světa",
+  "mořští živočichové",
+  "geologie a minerály",
+  "genetika a DNA",
+  "evoluční biologie",
+  "matematika a geometrie",
+  "vědecké objevy a vynálezy",
+  "Nobelovy ceny za vědu",
+  "planety a sluneční soustava",
+  "mikrobiologie",
+  "meteorologie a klima",
+  "ekologie",
+  "paleontologie a dinosauři",
+  "hmyz a pavoukovci",
+  
+  // Umění a kultura (15 témat)
+  "renesanční malířství",
+  "impresionismus a postimpresionismus",
+  "moderní a současné umění",
+  "sochařství",
+  "historická architektura",
+  "moderní architektura",
+  "světová muzea a galerie",
+  "světové památky UNESCO",
+  "české hrady a zámky",
+  "starověké divy světa",
+  "divadlo a drama",
+  "opera a balet",
+  "filmová klasika (do 1980)",
+  "moderní kinematografie",
+  "animovaný film",
+  
+  // Literatura (10 témat)
+  "česká literatura",
+  "světová literatura 19. století",
+  "světová literatura 20. století",
+  "antická literatura a mytologie",
+  "ruská literatura",
+  "anglická a americká literatura",
+  "francouzská literatura",
+  "poezie světová",
+  "Nobelova cena za literaturu",
+  "sci-fi a fantasy literatura",
+  
+  // Hudba (10 témat)
+  "barokní hudba",
+  "klasicismus a romantismus",
+  "operní díla a skladatelé",
+  "čeští skladatelé",
+  "jazz a blues",
+  "rock historie (1950-1990)",
+  "pop a moderní hudba",
+  "hudební nástroje",
+  "filmová hudba",
+  "světoví dirigenti a orchestry",
+  
+  // Sport (10 témat)
+  "letní olympijské hry",
+  "zimní olympijské hry",
+  "fotbal - MS a kluby",
+  "lední hokej",
+  "tenis",
+  "atletika a světové rekordy",
+  "formule 1 a motorsport",
+  "bojové sporty a olympijské disciplíny",
+  "cyklistika",
+  "plavání a vodní sporty"
+];
+
 export function getAgeGroups() {
   return Object.entries(AGE_GROUP_CONFIG).map(([key, config]) => ({ key, ...config }));
+}
+
+/**
+ * 🆕 Získá další téma z globální rotace (100 témat bez opakování)
+ * Používá DB pro perzistenci mezi restarty serveru
+ * @param {boolean} skipDbWrite - Pokud true, téma se NEZAPÍŠE do DB (pro retry mechanismus)
+ */
+async function getNextTopic(skipDbWrite = false) {
+  // Fallback pokud DB není dostupná
+  if (!useDatabase || !questionDatabase) {
+    return ALL_TOPICS[Math.floor(Math.random() * ALL_TOPICS.length)];
+  }
+
+  try {
+    const usedTopics = await questionDatabase.getUsedTopics();
+    const usedSet = new Set(usedTopics);
+    const available = ALL_TOPICS.filter(t => !usedSet.has(t));
+
+    // Pokud všechna témata použita → reset a začni znovu
+    if (available.length === 0) {
+      console.log('🔄 Všech 100 témat použito, resetuji rotaci...');
+      await questionDatabase.resetTopicRotation();
+      const topic = ALL_TOPICS[Math.floor(Math.random() * ALL_TOPICS.length)];
+      // Zapiš pouze pokud NENÍ skipDbWrite
+      if (!skipDbWrite) {
+        await questionDatabase.markTopicUsed(topic);
+      }
+      return topic;
+    }
+
+    // Vyber náhodně z dostupných
+    const topic = available[Math.floor(Math.random() * available.length)];
+    
+    // Zapiš pouze pokud NENÍ skipDbWrite
+    if (!skipDbWrite) {
+      await questionDatabase.markTopicUsed(topic);
+    }
+    
+    console.log(`📚 Téma: "${topic}" (zbývá ${available.length - 1}/100)`);
+    return topic;
+  } catch (e) {
+    console.error('getNextTopic error:', e.message);
+    return ALL_TOPICS[Math.floor(Math.random() * ALL_TOPICS.length)];
+  }
+}
+
+/**
+ * 🆕 Zapíše použitá témata do DB (volá se až po úspěšné validaci)
+ * @param {string[]} topics - Pole témat k zapsání
+ */
+async function markTopicsAsUsed(topics) {
+  if (!useDatabase || !questionDatabase || !topics || topics.length === 0) return;
+  
+  for (const topic of topics) {
+    await questionDatabase.markTopicUsed(topic);
+  }
+  console.log(`💾 Zapsáno ${topics.length} témat do DB`);
 }
 
 // === FACT CHECKING (SONAR) ===
@@ -287,20 +459,12 @@ function filterQuestions(questions, session) {
 
 /**
  * 🎯 PROMPT BUILDER - generuje specifický prompt podle věkové kategorie
+ * @param {string} ageGroup - 'adult', 'student', nebo 'kids'
+ * @param {object} config - konfigurace věkové skupiny
+ * @param {string[]} topics - pole 5 témat (pouze pro adult, z globální rotace)
  */
-function buildPromptForAgeGroup(ageGroup, config) {
-  // Témata pro rotaci (zabraňuje opakování stejných témat)
-  const ADULT_TOPICS = [
-    "česká a světová historie",
-    "světová literatura a autoři",
-    "zeměpis a hlavní města",
-    "přírodní vědy a objevy",
-    "klasická hudba a skladatelé",
-    "film a režiséři",
-    "sport a olympijské hry",
-    "umění a malíři"
-  ];
-  
+function buildPromptForAgeGroup(ageGroup, config, topics = null) {
+  // Témata pro děti (zachováno původní chování)
   const KID_TOPICS = [
     "zvířata a jejich vlastnosti",
     "pohádky a dětské příběhy",
@@ -309,15 +473,20 @@ function buildPromptForAgeGroup(ageGroup, config) {
     "roční období a počasí"
   ];
 
-  // Náhodné téma pro variabilitu
-  const topics = ageGroup === 'adult' ? ADULT_TOPICS : KID_TOPICS;
-  const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-
   if (ageGroup === 'adult') {
+    // Pro dospělé: 5 různých témat z globální rotace
+    const topicList = topics && topics.length === 5 
+      ? topics.map((t, i) => `${i + 1}. ${t}`).join('\n')
+      : '1. obecné znalosti';
+      
     return `Jsi expert na tvorbu NÁROČNÝCH kvízových otázek pro vědomostní soutěže (AZ-kvíz, Riskuj!).
 
-TÉMA: ${randomTopic}
 JAZYK: Čeština (gramaticky správně!)
+
+═══════════════════════════════════════════════════════════
+🎯 TÉMATA (každá otázka z JINÉHO tématu):
+═══════════════════════════════════════════════════════════
+${topicList}
 
 ═══════════════════════════════════════════════════════════
 PRAVIDLA PRO GENEROVÁNÍ
@@ -326,6 +495,7 @@ PRAVIDLA PRO GENEROVÁNÍ
 1. OBTÍŽNOST - otázky musí testovat ZNALOSTI, ne zdravý rozum
 2. JEDNOZNAČNOST - právě JEDNA odpověď musí být správná
 3. DISTRAKTORY - špatné odpovědi musí být uvěřitelné, ale jasně špatné
+4. VARIABILITA - každá otázka MUSÍ být z jiného tématu (viz seznam výše)
 
 ═══════════════════════════════════════════════════════════
 ❌ NEGENERUJ (triviální/příliš snadné):
@@ -388,7 +558,7 @@ Vrať POUZE JSON pole (žádný další text):
   ...
 ]
 
-- Přesně 5 otázek
+- Přesně 5 otázek (každá z JINÉHO tématu ze seznamu výše)
 - Každá má přesně 3 možnosti
 - "correct" = index správné odpovědi (0, 1, nebo 2)
 - Odpovědi max 4 slova
@@ -396,6 +566,7 @@ Vrať POUZE JSON pole (žádný další text):
   } 
   
   else if (ageGroup === 'student') {
+    const randomTopic = KID_TOPICS[Math.floor(Math.random() * KID_TOPICS.length)];
     return `Jsi expert na tvorbu kvízových otázek pro STŘEDOŠKOLÁKY v ČEŠTINĚ.
 
 KATEGORIE: Školáci (12-18 let)
@@ -412,6 +583,7 @@ Vytvoř 5 otázek. Vrať POUZE JSON.`;
   }
   
   else { // kids
+    const randomTopic = KID_TOPICS[Math.floor(Math.random() * KID_TOPICS.length)];
     return `Jsi expert na tvorbu JEDNODUCHÝCH kvízových otázek pro DĚTI v ČEŠTINĚ.
 
 KATEGORIE: Děti (6-12 let)
@@ -428,7 +600,7 @@ Vytvoř 5 otázek. Vrať POUZE JSON.`;
 }
 
 // === GENERACE Z LLM (S Retry a Fallbacky) ===
-async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
+async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0, existingTopics = null) {
   const client = getGroqClient();
   if (!client) return [];
 
@@ -440,8 +612,18 @@ async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
 
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
   
-  // 🆕 VYLEPŠENÝ PROMPT podle věkové kategorie
-  const prompt = buildPromptForAgeGroup(ageGroup, config);
+  // 🆕 Pro dospělé: použij existující témata NEBO vyber nová (BEZ zápisu do DB)
+  let topics = existingTopics;
+  if (ageGroup === 'adult' && !topics) {
+    topics = [];
+    for (let i = 0; i < 5; i++) {
+      topics.push(await getNextTopic(true));  // true = skipDbWrite
+    }
+    console.log(`🎲 Generuji batch s tématy: ${topics.join(', ')}`);
+  }
+  
+  // 🆕 VYLEPŠENÝ PROMPT podle věkové kategorie (s tématy pro adult)
+  const prompt = buildPromptForAgeGroup(ageGroup, config, topics);
 
   try {
     const response = await client.chat.completions.create({
@@ -453,19 +635,19 @@ async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
     const content = response.choices[0].message.content;
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     
-    // 🔄 RETRY: Pokud model nevrátil JSON
+    // 🔄 RETRY: Pokud model nevrátil JSON (se STEJNÝMI tématy)
     if (!jsonMatch) {
       console.warn(`⚠️ LLM syntax error (pokus ${retryCount+1}). Zkouším znovu...`);
-      return generateBatchFromLLM(ageGroup, gameSession, retryCount + 1);
+      return generateBatchFromLLM(ageGroup, gameSession, retryCount + 1, topics);
     }
     
     let rawQuestions;
     try {
       rawQuestions = JSON.parse(jsonMatch[0]);
     } catch (parseErr) {
-      // 🔄 RETRY: Pokud JSON nejde parsovat
+      // 🔄 RETRY: Pokud JSON nejde parsovat (se STEJNÝMI tématy)
       console.warn(`⚠️ JSON Parse Error (pokus ${retryCount+1}). Zkouším znovu...`);
-      return generateBatchFromLLM(ageGroup, gameSession, retryCount + 1);
+      return generateBatchFromLLM(ageGroup, gameSession, retryCount + 1, topics);
     }
 
     validationStats.generated += rawQuestions.length;
@@ -475,8 +657,24 @@ async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
       q.question && Array.isArray(q.options) && q.options.length === 3 && typeof q.correct === 'number'
     );
     
-    // 2. 🆕 Kontrola obtížnosti (pro dospělé) - filtruje triviální otázky
-    const difficultyFiltered = structurallyValid.filter(q => {
+    // 1.5 🆕 Kontrola: odpověď nesmí být obsažena v otázce
+    const answerNotInQuestion = structurallyValid.filter(q => {
+      const questionNorm = normalizeText(q.question);
+      const correctAnswer = q.options[q.correct];
+      const answerNorm = normalizeText(correctAnswer);
+      
+      // Odpověď musí mít alespoň 3 znaky pro smysluplnou kontrolu
+      if (answerNorm.length < 3) return true;
+      
+      if (questionNorm.includes(answerNorm)) {
+        console.log(`   🚫 Odpověď v otázce: "${q.question.substring(0, 40)}..." → "${correctAnswer}"`);
+        return false;
+      }
+      return true;
+    });
+    
+    // 2. Kontrola obtížnosti (pro dospělé) - filtruje triviální otázky
+    const difficultyFiltered = answerNotInQuestion.filter(q => {
       if (ageGroup !== 'adult') return true; // Pro děti nefiltrujeme
       
       const question = q.question.toLowerCase();
@@ -533,6 +731,11 @@ async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0) {
     for (const q of uniqueQuestions) {
         const isValid = await validateWithSonar(q);
         if (isValid) finalQuestions.push(q);
+    }
+
+    // 🆕 Po úspěšné validaci: zapiš témata do DB
+    if (finalQuestions.length > 0 && topics) {
+      await markTopicsAsUsed(topics);
     }
 
     // Uložení do DB

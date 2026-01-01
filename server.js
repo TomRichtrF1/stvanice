@@ -199,12 +199,12 @@ io.on('connection', (socket) => {
   socket.on('join_game', (roomCode) => {
     const room = activeRooms.get(roomCode);
     if (!room) {
-      socket.emit('error', { message: 'Místnost nenalezena.' });
+      socket.emit('join_error', { message: 'Tato místnost neexistuje nebo hra již skončila.' });
       return;
     }
     
     if (room.players.length >= 2 && !room.players.some(p => !p.connected)) {
-      socket.emit('error', { message: 'Plno.' });
+      socket.emit('join_error', { message: 'Místnost je plná.' });
       return;
     }
 
