@@ -299,6 +299,31 @@ CREATE TABLE topic_rotation (
 5. **Inteligentní fallback** - graceful degradation při výpadcích
 6. **Pre-warming cache** - otázky připraveny před začátkem hry
 
+### Střídání LLM / DB
+
+Otázky se střídají pravidelně mezi LLM a databází:
+
+```javascript
+function shouldUseLLM(round) {
+  return round % 2 === 1;  // Liché = LLM, Sudé = DB
+}
+```
+
+| Kolo | round % 2 | Zdroj |
+|------|-----------|-------|
+| 1 | 1 (liché) | LLM |
+| 2 | 0 (sudé) | DB |
+| 3 | 1 (liché) | LLM |
+| 4 | 0 (sudé) | DB |
+| 5 | 1 (liché) | LLM |
+| 6 | 0 (sudé) | DB |
+| ... | ... | ... |
+
+**Fallback logika:**
+- Pokud preferovaný zdroj (LLM/DB) je prázdný, použije se druhý
+- Pokud oba prázdné → live generace z LLM
+- Pokud i ta selže → DB live fallback
+
 ### Tok dat
 
 ```
@@ -311,13 +336,13 @@ CREATE TABLE topic_rotation (
 │  2. LLM cache: Background generace       │
 └──────────────────────────────────────┘
        ↓
-[Požadavek na otázku]
+[Požadavek na otázku (kolo N)]
        ↓
 ┌──────────────────────────────────────┐
-│  Strategie:                              │
-│  1. Zkus DB cache                        │
-│  2. Zkus LLM cache                       │
-│  3. Fallback: Generuj nové z LLM         │
+│  Střídání podle kola:                    │
+│  - Liché kolo (1,3,5...) → preferuj LLM  │
+│  - Sudé kolo (2,4,6...) → preferuj DB    │
+│  - Fallback na druhý zdroj pokud prázdný │
 └──────────────────────────────────────┘
        ↓
 [Validace + Uložení + Odeslání klientovi]
