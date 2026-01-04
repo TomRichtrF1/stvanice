@@ -97,6 +97,29 @@ function normalizeText(text) {
     .replace(/[^a-z0-9]/g, '').trim();
 }
 
+/**
+ * 🆕 Zamíchá pořadí odpovědí, aby správná nebyla vždy na pozici A
+ */
+function shuffleOptions(question) {
+  const correctAnswer = question.options[question.correct];
+  
+  // Fisher-Yates shuffle
+  const shuffled = [...question.options];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  
+  // Najdi nový index správné odpovědi
+  const newCorrect = shuffled.indexOf(correctAnswer);
+  
+  return {
+    ...question,
+    options: shuffled,
+    correct: newCorrect
+  };
+}
+
 function blockAnswerGlobally(answer) {
   if (!answer) return;
   const key = normalizeText(answer);
@@ -177,9 +200,9 @@ const AGE_GROUP_CONFIG = {
   kids: { name: "🐣 Děti", mode: 'kid', difficulty: 'easy' }
 };
 
-// === 100 TÉMAT PRO GLOBÁLNÍ ROTACI ===
+// === 200 TÉMAT PRO GLOBÁLNÍ ROTACI (DOSPĚLÍ) ===
 const ALL_TOPICS = [
-  // Historie (20 témat)
+  // Historie (40 témat)
   "české dějiny 20. století",
   "první světová válka",
   "druhá světová válka",
@@ -200,8 +223,28 @@ const ALL_TOPICS = [
   "osmanská říše",
   "dějiny Číny",
   "průmyslová revoluce",
-  
-  // Zeměpis (15 témat)
+  "dějiny Japonska",
+  "mayská a aztécká civilizace",
+  "perská říše",
+  "mongolská říše a Čingischán",
+  "křížové výpravy",
+  "africká království (Ghana, Mali, Songhai)",
+  "dějiny Indie a Mughalové",
+  "korejské dějiny",
+  "válka ve Vietnamu",
+  "arabsko-izraelské konflikty",
+  "apartheid a Nelson Mandela",
+  "kubánská revoluce",
+  "pád železné opony 1989",
+  "irská historie a IRA",
+  "skotské dějiny",
+  "polské dějiny",
+  "balkánské války",
+  "arménská genocida",
+  "tibetské dějiny",
+  "fénická civilizace",
+
+  // Zeměpis (30 témat)
   "hlavní města světa (méně známá)",
   "řeky a jezera světa",
   "pohoří a nejvyšší hory",
@@ -217,8 +260,23 @@ const ALL_TOPICS = [
   "vulkány a tektonické zóny",
   "polární oblasti",
   "světové metropole",
-  
-  // Přírodní vědy (20 témat)
+  "kavkazské státy",
+  "středoasijské státy",
+  "karibské ostrovy",
+  "tichomořské ostrovy",
+  "fjordy a ledovce",
+  "delty a mokřady",
+  "korálové útesy",
+  "deštné pralesy",
+  "savany a stepi",
+  "autonomní území světa",
+  "enklávy a exklávy",
+  "hranice a spory o území",
+  "města na řekách",
+  "přístavní města",
+  "oázy a vodní zdroje v poušti",
+
+  // Přírodní vědy (35 témat)
   "chemické prvky a periodická tabulka",
   "lidské tělo a anatomie",
   "astronomie a hvězdy",
@@ -239,8 +297,23 @@ const ALL_TOPICS = [
   "ekologie",
   "paleontologie a dinosauři",
   "hmyz a pavoukovci",
-  
-  // Umění a kultura (15 témat)
+  "kvantová fyzika",
+  "teorie relativity",
+  "černé díry a temná hmota",
+  "neurověda a mozek",
+  "virologie a epidemie",
+  "botanické zahrady světa",
+  "endemické druhy",
+  "mykologie (houby)",
+  "oceánografie",
+  "seismologie",
+  "kryptozoologie a mýty",
+  "biomechanika",
+  "astrobiologie",
+  "nanotechnologie",
+  "umělá inteligence a strojové učení",
+
+  // Umění a kultura (30 témat)
   "renesanční malířství",
   "impresionismus a postimpresionismus",
   "moderní a současné umění",
@@ -256,8 +329,23 @@ const ALL_TOPICS = [
   "filmová klasika (do 1980)",
   "moderní kinematografie",
   "animovaný film",
-  
-  // Literatura (10 témat)
+  "street art a graffiti",
+  "fotografie jako umění",
+  "asijské umění",
+  "africké umění",
+  "islámské umění a kaligrafie",
+  "art deco a art nouveau",
+  "gotická architektura",
+  "japonská kultura (ikebana, origami)",
+  "indická kultura a Bollywood",
+  "skandinávský design",
+  "móda a módní návrháři",
+  "filmové festivaly",
+  "dokumentární film",
+  "seriálová tvorba (HBO, Netflix)",
+  "videoherní průmysl",
+
+  // Literatura (20 témat)
   "česká literatura",
   "světová literatura 19. století",
   "světová literatura 20. století",
@@ -268,8 +356,18 @@ const ALL_TOPICS = [
   "poezie světová",
   "Nobelova cena za literaturu",
   "sci-fi a fantasy literatura",
-  
-  // Hudba (10 témat)
+  "japonská literatura",
+  "latinskoamerická literatura",
+  "severská krimi literatura",
+  "africká literatura",
+  "čínská literatura",
+  "arabská literatura a Tisíc a jedna noc",
+  "beat generation",
+  "existencialismus v literatuře",
+  "dystopická literatura",
+  "komiksy a grafické romány",
+
+  // Hudba (20 témat)
   "barokní hudba",
   "klasicismus a romantismus",
   "operní díla a skladatelé",
@@ -280,8 +378,18 @@ const ALL_TOPICS = [
   "hudební nástroje",
   "filmová hudba",
   "světoví dirigenti a orchestry",
-  
-  // Sport (10 témat)
+  "elektronická hudba",
+  "hip hop a rap",
+  "reggae a Bob Marley",
+  "world music",
+  "heavy metal",
+  "punk rock",
+  "country a folk",
+  "latina (salsa, tango)",
+  "K-pop a J-pop",
+  "africká hudba",
+
+  // Sport (15 témat)
   "letní olympijské hry",
   "zimní olympijské hry",
   "fotbal - MS a kluby",
@@ -291,7 +399,198 @@ const ALL_TOPICS = [
   "formule 1 a motorsport",
   "bojové sporty a olympijské disciplíny",
   "cyklistika",
-  "plavání a vodní sporty"
+  "plavání a vodní sporty",
+  "golf",
+  "rugby a kriket",
+  "extrémní sporty",
+  "esport a gaming",
+  "paralympijské hry",
+
+  // Společnost a moderní témata (10 témat)
+  "technologičtí vizionáři (Jobs, Musk, Gates)",
+  "sociální sítě a influenceři",
+  "kryptoměny a blockchain",
+  "ekologická hnutí",
+  "startup kultura",
+  "slavné soudní procesy",
+  "konspirační teorie a jejich vyvracení",
+  "moderní architektura mrakodrapů",
+  "vesmírné mise 21. století",
+  "pandemie v historii"
+];
+
+// === 100 TÉMAT PRO ŠKOLÁKY (12-18 let) ===
+const STUDENT_TOPICS = [
+  // Historie (20 témat)
+  "české dějiny 20. století",
+  "první a druhá světová válka",
+  "starověké civilizace",
+  "středověká Evropa",
+  "doba Karla IV.",
+  "husitství a Jan Hus",
+  "národní obrození",
+  "vznik Československa",
+  "sametová revoluce",
+  "studená válka",
+  "starověký Egypt",
+  "antické Řecko a Řím",
+  "renesance",
+  "průmyslová revoluce",
+  "koloniální období",
+  "americká válka za nezávislost",
+  "francouzská revoluce",
+  "Napoleon Bonaparte",
+  "objevitelé a cestovatelé",
+  "dějiny 21. století",
+
+  // Zeměpis (15 témat)
+  "hlavní města Evropy",
+  "hlavní města světa",
+  "řeky a pohoří Evropy",
+  "české hory a řeky",
+  "kontinenty a oceány",
+  "státy Evropské unie",
+  "asijské státy",
+  "africké státy",
+  "americké státy",
+  "podnebné pásy",
+  "přírodní katastrofy",
+  "národní parky ČR",
+  "světové památky UNESCO",
+  "sopky a zemětřesení",
+  "deštné pralesy a pouště",
+
+  // Přírodní vědy (20 témat)
+  "lidské tělo a orgány",
+  "buňky a tkáně",
+  "periodická tabulka prvků",
+  "chemické reakce",
+  "fyzikální zákony",
+  "elektřina a magnetismus",
+  "optika a světlo",
+  "zvuk a vlnění",
+  "sluneční soustava",
+  "hvězdy a galaxie",
+  "ekologie a životní prostředí",
+  "potravní řetězce",
+  "savci a ptáci",
+  "plazi a obojživelníci",
+  "ryby a vodní živočichové",
+  "rostliny a fotosyntéza",
+  "genetika základy",
+  "evoluce a Darwin",
+  "minerály a horniny",
+  "počasí a klima",
+
+  // Matematika a logika (10 témat)
+  "geometrie a tvary",
+  "zlomky a procenta",
+  "rovnice a funkce",
+  "statistika základy",
+  "pravděpodobnost",
+  "slavní matematici",
+  "matematické důkazy",
+  "čísla a jejich vlastnosti",
+  "jednotky a převody",
+  "logické úlohy",
+
+  // Umění a kultura (10 témat)
+  "české malířství",
+  "světové malířství",
+  "architektura slohů",
+  "české hrady a zámky",
+  "divadlo a drama",
+  "hudební nástroje",
+  "filmová tvorba",
+  "fotografování",
+  "sochařství",
+  "design a móda",
+
+  // Literatura (10 témat)
+  "česká literatura povinná četba",
+  "světová literatura pro mládež",
+  "antická literatura a báje",
+  "pohádky a pověsti",
+  "poezie a básníci",
+  "divadelní hry",
+  "sci-fi a fantasy",
+  "detektivky a thrillery",
+  "komiksy a manga",
+  "současná literatura pro teenagery",
+
+  // Hudba (5 témat)
+  "hudební žánry",
+  "čeští zpěváci a kapely",
+  "světové hudební hvězdy",
+  "dějiny populární hudby",
+  "hudební teorie základy",
+
+  // Sport (10 témat)
+  "olympijské hry",
+  "fotbal a hokej",
+  "tenis a atletika",
+  "zimní sporty",
+  "vodní sporty",
+  "bojové sporty",
+  "čeští sportovci",
+  "sportovní rekordy",
+  "paralympijské sporty",
+  "esport"
+];
+
+// === 40 TÉMAT PRO DĚTI (6-12 let) ===
+const KIDS_TOPICS = [
+  // Zvířata (10 témat)
+  "domácí mazlíčci",
+  "zvířata na farmě",
+  "zvířata v ZOO",
+  "zvířata v lese",
+  "mořská zvířata",
+  "ptáci kolem nás",
+  "hmyz a brouci",
+  "dinosauři",
+  "zvířata Afriky",
+  "zvířecí mláďata",
+
+  // Příroda (8 témat)
+  "roční období",
+  "počasí a oblaka",
+  "stromy a květiny",
+  "ovoce a zelenina",
+  "planety a vesmír",
+  "hory a řeky",
+  "moře a oceány",
+  "den a noc",
+
+  // Pohádky a příběhy (8 témat)
+  "české pohádky",
+  "zahraniční pohádky",
+  "Disney postavy",
+  "Pixar filmy",
+  "Harry Potter",
+  "superhrdinové",
+  "pohádkové bytosti",
+  "animované seriály",
+
+  // Člověk a tělo (4 témata)
+  "lidské tělo pro děti",
+  "smysly člověka",
+  "zdraví a hygiena",
+  "jídlo a výživa",
+
+  // Věda pro děti (5 témat)
+  "jednoduché pokusy",
+  "jak věci fungují",
+  "dopravní prostředky",
+  "vynálezy pro děti",
+  "roboti a technologie",
+
+  // Sport a hry (5 témat)
+  "sportovní hry",
+  "olympijské sporty pro děti",
+  "míčové hry",
+  "zimní sporty pro děti",
+  "pohybové hry"
 ];
 
 export function getAgeGroups() {
@@ -299,29 +598,44 @@ export function getAgeGroups() {
 }
 
 /**
- * 🆕 Získá další téma z globální rotace (100 témat bez opakování)
+ * 🆕 Získá další téma z globální rotace (bez opakování pro danou kategorii)
  * Používá DB pro perzistenci mezi restarty serveru
  * @param {boolean} skipDbWrite - Pokud true, téma se NEZAPÍŠE do DB (pro retry mechanismus)
+ * @param {string} ageGroup - 'adult', 'student', nebo 'kids'
  */
-async function getNextTopic(skipDbWrite = false) {
+async function getNextTopic(skipDbWrite = false, ageGroup = 'adult') {
+  // Výběr správné sady témat podle kategorie
+  const topicSets = {
+    adult: ALL_TOPICS,
+    student: STUDENT_TOPICS,
+    kids: KIDS_TOPICS
+  };
+  const topics = topicSets[ageGroup] || ALL_TOPICS;
+  const prefix = `${ageGroup}:`;
+  
   // Fallback pokud DB není dostupná
   if (!useDatabase || !questionDatabase) {
-    return ALL_TOPICS[Math.floor(Math.random() * ALL_TOPICS.length)];
+    return topics[Math.floor(Math.random() * topics.length)];
   }
 
   try {
-    const usedTopics = await questionDatabase.getUsedTopics();
+    const allUsedTopics = await questionDatabase.getUsedTopics();
+    // Filtrovat pouze témata pro danou kategorii (podle prefixu)
+    const usedTopics = allUsedTopics
+      .filter(t => t.startsWith(prefix))
+      .map(t => t.substring(prefix.length));
+    
     const usedSet = new Set(usedTopics);
-    const available = ALL_TOPICS.filter(t => !usedSet.has(t));
+    const available = topics.filter(t => !usedSet.has(t));
 
-    // Pokud všechna témata použita → reset a začni znovu
+    // Pokud všechna témata použita → reset pro tuto kategorii a začni znovu
     if (available.length === 0) {
-      console.log('🔄 Všech 100 témat použito, resetuji rotaci...');
-      await questionDatabase.resetTopicRotation();
-      const topic = ALL_TOPICS[Math.floor(Math.random() * ALL_TOPICS.length)];
-      // Zapiš pouze pokud NENÍ skipDbWrite
+      console.log(`🔄 Všech ${topics.length} témat (${ageGroup}) použito, resetuji...`);
+      // Selektivní reset - smažeme pouze témata s daným prefixem
+      await resetTopicsForCategory(ageGroup);
+      const topic = topics[Math.floor(Math.random() * topics.length)];
       if (!skipDbWrite) {
-        await questionDatabase.markTopicUsed(topic);
+        await questionDatabase.markTopicUsed(prefix + topic);
       }
       return topic;
     }
@@ -329,30 +643,57 @@ async function getNextTopic(skipDbWrite = false) {
     // Vyber náhodně z dostupných
     const topic = available[Math.floor(Math.random() * available.length)];
     
-    // Zapiš pouze pokud NENÍ skipDbWrite
     if (!skipDbWrite) {
-      await questionDatabase.markTopicUsed(topic);
+      await questionDatabase.markTopicUsed(prefix + topic);
     }
     
-    console.log(`📚 Téma: "${topic}" (zbývá ${available.length - 1}/100)`);
+    console.log(`📚 Téma (${ageGroup}): "${topic}" (zbývá ${available.length - 1}/${topics.length})`);
     return topic;
   } catch (e) {
     console.error('getNextTopic error:', e.message);
-    return ALL_TOPICS[Math.floor(Math.random() * ALL_TOPICS.length)];
+    return topics[Math.floor(Math.random() * topics.length)];
+  }
+}
+
+/**
+ * 🆕 Resetuje témata pouze pro danou kategorii
+ * @param {string} ageGroup - 'adult', 'student', nebo 'kids'
+ */
+async function resetTopicsForCategory(ageGroup) {
+  if (!useDatabase || !questionDatabase) return;
+  
+  try {
+    const allUsedTopics = await questionDatabase.getUsedTopics();
+    const prefix = `${ageGroup}:`;
+    const topicsToReset = allUsedTopics.filter(t => t.startsWith(prefix));
+    
+    // Resetujeme celou tabulku a znovu přidáme témata ostatních kategorií
+    const otherTopics = allUsedTopics.filter(t => !t.startsWith(prefix));
+    await questionDatabase.resetTopicRotation();
+    
+    for (const topic of otherTopics) {
+      await questionDatabase.markTopicUsed(topic);
+    }
+    
+    console.log(`🔄 Reset ${topicsToReset.length} témat pro kategorii ${ageGroup}`);
+  } catch (e) {
+    console.error('resetTopicsForCategory error:', e.message);
   }
 }
 
 /**
  * 🆕 Zapíše použitá témata do DB (volá se až po úspěšné validaci)
  * @param {string[]} topics - Pole témat k zapsání
+ * @param {string} ageGroup - 'adult', 'student', nebo 'kids'
  */
-async function markTopicsAsUsed(topics) {
+async function markTopicsAsUsed(topics, ageGroup = 'adult') {
   if (!useDatabase || !questionDatabase || !topics || topics.length === 0) return;
   
+  const prefix = `${ageGroup}:`;
   for (const topic of topics) {
-    await questionDatabase.markTopicUsed(topic);
+    await questionDatabase.markTopicUsed(prefix + topic);
   }
-  console.log(`💾 Zapsáno ${topics.length} témat do DB`);
+  console.log(`💾 Zapsáno ${topics.length} témat (${ageGroup}) do DB`);
 }
 
 // === FACT CHECKING (SONAR) ===
@@ -461,24 +802,15 @@ function filterQuestions(questions, session) {
  * 🎯 PROMPT BUILDER - generuje specifický prompt podle věkové kategorie
  * @param {string} ageGroup - 'adult', 'student', nebo 'kids'
  * @param {object} config - konfigurace věkové skupiny
- * @param {string[]} topics - pole 5 témat (pouze pro adult, z globální rotace)
+ * @param {string[]} topics - pole 5 témat (z globální rotace pro všechny kategorie)
  */
 function buildPromptForAgeGroup(ageGroup, config, topics = null) {
-  // Témata pro děti (zachováno původní chování)
-  const KID_TOPICS = [
-    "zvířata a jejich vlastnosti",
-    "pohádky a dětské příběhy",
-    "základní matematika",
-    "barvy a tvary",
-    "roční období a počasí"
-  ];
+  // Formátování seznamu témat
+  const topicList = topics && topics.length === 5 
+    ? topics.map((t, i) => `${i + 1}. ${t}`).join('\n')
+    : '1. obecné znalosti';
 
   if (ageGroup === 'adult') {
-    // Pro dospělé: 5 různých témat z globální rotace
-    const topicList = topics && topics.length === 5 
-      ? topics.map((t, i) => `${i + 1}. ${t}`).join('\n')
-      : '1. obecné znalosti';
-      
     return `Jsi expert na tvorbu NÁROČNÝCH kvízových otázek pro vědomostní soutěže (AZ-kvíz, Riskuj!).
 
 JAZYK: Čeština (gramaticky správně!)
@@ -566,36 +898,44 @@ Vrať POUZE JSON pole (žádný další text):
   } 
   
   else if (ageGroup === 'student') {
-    const randomTopic = KID_TOPICS[Math.floor(Math.random() * KID_TOPICS.length)];
     return `Jsi expert na tvorbu kvízových otázek pro STŘEDOŠKOLÁKY v ČEŠTINĚ.
 
 KATEGORIE: Školáci (12-18 let)
-TÉMA: ${randomTopic}
+
+═══════════════════════════════════════════════════════════
+🎯 TÉMATA (každá otázka z JINÉHO tématu):
+═══════════════════════════════════════════════════════════
+${topicList}
 
 PRAVIDLA:
 - Otázky přiměřené věku 12-18 let
 - Mohou být z učiva ZŠ/SŠ
 - Ne příliš jednoduché, ne příliš těžké
 - PRÁVĚ JEDNA odpověď musí být správná
+- Každá otázka MUSÍ být z jiného tématu ze seznamu výše
 
 FORMÁT: JSON pole [{"question": "...", "options": ["A", "B", "C"], "correct": 0}]
-Vytvoř 5 otázek. Vrať POUZE JSON.`;
+Vytvoř přesně 5 otázek. Vrať POUZE JSON.`;
   }
   
   else { // kids
-    const randomTopic = KID_TOPICS[Math.floor(Math.random() * KID_TOPICS.length)];
     return `Jsi expert na tvorbu JEDNODUCHÝCH kvízových otázek pro DĚTI v ČEŠTINĚ.
 
 KATEGORIE: Děti (6-12 let)
-TÉMA: ${randomTopic}
+
+═══════════════════════════════════════════════════════════
+🎯 TÉMATA (každá otázka z JINÉHO tématu):
+═══════════════════════════════════════════════════════════
+${topicList}
 
 PRAVIDLA:
 - Otázky musí být JEDNODUCHÉ a zábavné
 - Vhodné pro děti základní školy
-- Témata: zvířata, pohádky, příroda, základní fakta
+- PRÁVĚ JEDNA odpověď musí být správná
+- Každá otázka MUSÍ být z jiného tématu ze seznamu výše
 
 FORMÁT: JSON pole [{"question": "...", "options": ["A", "B", "C"], "correct": 0}]
-Vytvoř 5 otázek. Vrať POUZE JSON.`;
+Vytvoř přesně 5 otázek. Vrať POUZE JSON.`;
   }
 }
 
@@ -612,17 +952,17 @@ async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0, exist
 
   const config = AGE_GROUP_CONFIG[ageGroup] || AGE_GROUP_CONFIG.adult;
   
-  // 🆕 Pro dospělé: použij existující témata NEBO vyber nová (BEZ zápisu do DB)
+  // 🆕 Pro VŠECHNY kategorie: použij existující témata NEBO vyber nová (BEZ zápisu do DB)
   let topics = existingTopics;
-  if (ageGroup === 'adult' && !topics) {
+  if (!topics) {
     topics = [];
     for (let i = 0; i < 5; i++) {
-      topics.push(await getNextTopic(true));  // true = skipDbWrite
+      topics.push(await getNextTopic(true, ageGroup));  // true = skipDbWrite, ageGroup pro správnou sadu
     }
-    console.log(`🎲 Generuji batch s tématy: ${topics.join(', ')}`);
+    console.log(`🎲 Generuji batch (${ageGroup}) s tématy: ${topics.join(', ')}`);
   }
   
-  // 🆕 VYLEPŠENÝ PROMPT podle věkové kategorie (s tématy pro adult)
+  // 🆕 VYLEPŠENÝ PROMPT podle věkové kategorie (s tématy pro všechny)
   const prompt = buildPromptForAgeGroup(ageGroup, config, topics);
 
   try {
@@ -735,16 +1075,19 @@ async function generateBatchFromLLM(ageGroup, gameSession, retryCount = 0, exist
 
     // 🆕 Po úspěšné validaci: zapiš témata do DB
     if (finalQuestions.length > 0 && topics) {
-      await markTopicsAsUsed(topics);
+      await markTopicsAsUsed(topics, ageGroup);
     }
 
+    // 🆕 Zamíchej pořadí odpovědí (aby správná nebyla vždy A)
+    const shuffledQuestions = finalQuestions.map(q => shuffleOptions(q));
+
     // Uložení do DB
-    if (useDatabase && questionDatabase && finalQuestions.length > 0) {
-       questionDatabase.saveQuestions(finalQuestions, config.mode, config.difficulty)
+    if (useDatabase && questionDatabase && shuffledQuestions.length > 0) {
+       questionDatabase.saveQuestions(shuffledQuestions, config.mode, config.difficulty)
          .catch(err => console.error("Save error (nevadí):", err.message));
     }
 
-    return finalQuestions;
+    return shuffledQuestions;
 
   } catch (error) {
     console.error("LLM Error:", error.message);
