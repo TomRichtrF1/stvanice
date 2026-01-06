@@ -200,398 +200,416 @@ const AGE_GROUP_CONFIG = {
   kids: { name: "🐣 Děti", mode: 'kid', difficulty: 'easy' }
 };
 
-// === 200 TÉMAT PRO GLOBÁLNÍ ROTACI (DOSPĚLÍ) ===
-const ALL_TOPICS = [
-  // Historie (40 témat)
-  "české dějiny 20. století",
-  "první světová válka",
-  "druhá světová válka",
-  "starověký Řím",
-  "starověké Řecko",
-  "středověká Evropa",
-  "habsburská monarchie",
-  "Přemyslovci a Lucemburkové",
-  "francouzská revoluce",
-  "americká válka za nezávislost",
-  "ruská revoluce a SSSR",
-  "studená válka",
-  "kolonialismus a dekolonizace",
-  "renesance a reformace",
-  "starověký Egypt",
-  "Vikingové a severské dějiny",
-  "byzantská říše",
-  "osmanská říše",
-  "dějiny Číny",
-  "průmyslová revoluce",
-  "dějiny Japonska",
-  "mayská a aztécká civilizace",
-  "perská říše",
-  "mongolská říše a Čingischán",
-  "křížové výpravy",
-  "africká království (Ghana, Mali, Songhai)",
-  "dějiny Indie a Mughalové",
-  "korejské dějiny",
-  "válka ve Vietnamu",
-  "arabsko-izraelské konflikty",
-  "apartheid a Nelson Mandela",
-  "kubánská revoluce",
-  "pád železné opony 1989",
-  "irská historie a IRA",
-  "skotské dějiny",
-  "polské dějiny",
-  "balkánské války",
-  "arménská genocida",
-  "tibetské dějiny",
-  "fénická civilizace",
+// === STRUKTUROVANÉ KATEGORIE A TÉMATA PRO DOSPĚLÉ (140 kategorií) ===
+// Zdroj: STRUKTURA_KATEGORII_A_TEMAT_DOSPELI.md
+// "Obecná otázka z kategorie" se přidává automaticky při flatten
+const CATEGORIES_ADULT = {
+  // BLOK 1: HISTORIE (15 kategorií)
+  "Starověké civilizace": ["Egypt a pyramidy", "Mezopotámie a Sumer", "antické Řecko", "Římská říše", "Persie", "Fénicie a Kartágo", "starověká Indie", "starověká Čína"],
+  "Starověká filozofie a věda": ["Sokrates, Platón, Aristoteles", "stoicismus a epikureismus", "antická matematika", "Hippokrates a medicína", "Ptolemaiův model vesmíru"],
+  "Středověká Evropa": ["Franská říše a Karel Veliký", "feudalismus", "křížové výpravy", "rytířské řády", "středověké hrady", "černá smrt", "Hansa a obchod"],
+  "Středověk mimo Evropu": ["Arabský chalífát", "Osmanská říše", "dynastie Ming", "Mongolská říše", "japonský šogunát", "Vikingové"],
+  "Renesance a osvícenství": ["Da Vinci, Michelangelo, Raffael", "Shakespeare", "vědecká revoluce", "osvícenští filozofové", "humanismus"],
+  "Zámořské objevy a kolonialismus": ["Kolumbus, da Gama, Magalhães", "španělská a portugalská kolonizace", "otroctví a transatlantický obchod", "Východoindická společnost", "holandské impérium"],
+  "Reformace a náboženské války": ["Luther a protestantismus", "kalvinismus", "anglická reformace", "jezuité", "třicetiletá válka", "hugenotské války"],
+  "Francouzská revoluce a Napoleon": ["příčiny revoluce", "Deklarace práv člověka", "teror a Robespierre", "Napoleonovy války", "Vídeňský kongres", "Code Civil"],
+  "Průmyslová revoluce": ["textilní průmysl", "parní stroj", "železnice", "těžba a ocel", "urbanizace", "sociální změny"],
+  "Nacionalismus 19. století": ["německé sjednocení", "italské sjednocení", "balkánské národy", "latinoamerická nezávislost"],
+  "První světová válka": ["příčiny a aliance", "zákopová válka", "východní fronta", "nové zbraně", "Versailleská smlouva", "ruská revoluce"],
+  "Meziválečné období": ["zlatá dvacátá léta", "velká deprese", "vzestup fašismu", "Hitlerův vzestup", "Stalinovy čistky", "španělská občanská válka"],
+  "Druhá světová válka": ["Blitzkrieg", "bitva o Británii", "operace Barbarossa", "holocaust", "D-Day", "Pacifik a atomové bomby", "Norimberk"],
+  "Studená válka": ["železná opona", "NATO vs. Varšavská smlouva", "korejská válka", "kubánská krize", "vietnamská válka", "vesmírný závod", "pád SSSR"],
+  "Dějiny každodennosti": ["historie jídla", "dějiny módy", "historie bydlení", "dějiny hygieny", "historie zábavy", "dějiny cestování", "historie peněz"],
 
-  // Zeměpis (30 témat)
-  "hlavní města světa (méně známá)",
-  "řeky a jezera světa",
-  "pohoří a nejvyšší hory",
-  "ostrovy a souostroví",
-  "pouště světa",
-  "evropské státy a regiony",
-  "asijské státy",
-  "africké státy",
-  "státy Ameriky",
-  "Oceánie a Austrálie",
-  "průlivy, průplavy a zálivy",
-  "národní parky světa",
-  "vulkány a tektonické zóny",
-  "polární oblasti",
-  "světové metropole",
-  "kavkazské státy",
-  "středoasijské státy",
-  "karibské ostrovy",
-  "tichomořské ostrovy",
-  "fjordy a ledovce",
-  "delty a mokřady",
-  "korálové útesy",
-  "deštné pralesy",
-  "savany a stepi",
-  "autonomní území světa",
-  "enklávy a exklávy",
-  "hranice a spory o území",
-  "města na řekách",
-  "přístavní města",
-  "oázy a vodní zdroje v poušti",
+  // BLOK 2: ZEMĚPIS A GEOGRAFIE (12 kategorií)
+  "Fyzická geografie": ["tektonika desek", "sopky a zemětřesení", "pohoří světa", "řeky a jezera", "pouště", "ledovce", "oceány a moře"],
+  "Evropa": ["Skandinávie", "Britské ostrovy", "Střední Evropa", "Balkán", "Iberský poloostrov", "Itálie", "Pobaltí", "mikrostáty"],
+  "Asie": ["Blízký východ", "Střední Asie", "jižní Asie", "jihovýchodní Asie", "Čína", "Japonsko a Korea", "Sibiř"],
+  "Amerika": ["USA východ vs. západ", "Kanada", "Mexiko a Střední Amerika", "Karibik", "Brazílie", "Andské státy", "Amazonie"],
+  "Afrika a Oceánie": ["Severní Afrika", "subsaharská Afrika", "Jižní Afrika", "Austrálie", "Nový Zéland", "Polynésie", "Madagaskar"],
+  "Polární oblasti": ["Arktida", "Antarktida", "polární expedice", "ledovce", "permafrost", "polární fauna"],
+  "Metropole světa": ["evropské metropole", "asijské megaměsta", "americká velkoměsta", "historická hlavní města", "města na řekách", "nejstarší města"],
+  "Geopolitika a hranice": ["sporná území", "enklávy a exklávy", "rozdělené státy", "změny hranic ve 20. století", "separatismus", "koloniální dědictví"],
+  "Mapy a kartografie": ["historie mapování", "mapové projekce", "navigace", "GPS", "kartografické omyly", "imaginární země"],
+  "Cestování a turismus": ["památky UNESCO", "přírodní divy světa", "poutní místa", "extrémní turistika", "skryté perly", "turistické pasti"],
+  "Geologie a mineralogie": ["typy hornin", "minerály a krystaly", "drahokamy", "fosilie", "geologické éry", "jeskynní systémy"],
+  "Meteorologie a klima": ["typy oblaků", "bouřky a blesky", "hurikány", "tornáda", "klimatické rekordy", "předpověď počasí", "El Niño"],
 
-  // Přírodní vědy (35 témat)
-  "chemické prvky a periodická tabulka",
-  "lidské tělo a anatomie",
-  "astronomie a hvězdy",
-  "fyzikální zákony a konstanty",
-  "botanika a rostliny",
-  "savci světa",
-  "ptáci světa",
-  "mořští živočichové",
-  "geologie a minerály",
-  "genetika a DNA",
-  "evoluční biologie",
-  "matematika a geometrie",
-  "vědecké objevy a vynálezy",
-  "Nobelovy ceny za vědu",
-  "planety a sluneční soustava",
-  "mikrobiologie",
-  "meteorologie a klima",
-  "ekologie",
-  "paleontologie a dinosauři",
-  "hmyz a pavoukovci",
-  "kvantová fyzika",
-  "teorie relativity",
-  "černé díry a temná hmota",
-  "neurověda a mozek",
-  "virologie a epidemie",
-  "botanické zahrady světa",
-  "endemické druhy",
-  "mykologie (houby)",
-  "oceánografie",
-  "seismologie",
-  "kryptozoologie a mýty",
-  "biomechanika",
-  "astrobiologie",
-  "nanotechnologie",
-  "umělá inteligence a strojové učení",
+  // BLOK 3: PŘÍRODNÍ VĚDY (15 kategorií)
+  "Zoologie - savci a ptáci": ["savci", "ptáci", "chování zvířat", "migrace", "rekordmani říše", "domestikace"],
+  "Zoologie - ostatní": ["plazi a obojživelníci", "ryby", "hmyz", "pavoukovci", "měkkýši", "vymřelá zvířata"],
+  "Botanika": ["stromy a lesy", "květiny", "houby", "léčivé rostliny", "jedovaté rostliny", "masožravé rostliny"],
+  "Ekologie a životní prostředí": ["ekosystémy", "ohrožené druhy", "klimatická změna", "znečištění", "národní parky", "invazivní druhy"],
+  "Lidské tělo": ["kardiovaskulární systém", "nervový systém", "trávicí soustava", "imunitní systém", "smyslové orgány", "hormony"],
+  "Medicína a zdraví": ["vakcíny", "antibiotická rezistence", "epidemiologie", "chirurgie", "transplantace", "diagnostika", "placebo efekt"],
+  "Chemie": ["periodická tabulka", "organická chemie", "chemické reakce", "polymery a plasty", "jedy a toxiny", "chemie v životě"],
+  "Fyzika": ["mechanika a pohyb", "elektřina a magnetismus", "optika", "termodynamika", "jaderná fyzika", "kvantová fyzika", "relativita"],
+  "Astronomie - Sluneční soustava": ["Slunce", "vnitřní planety", "Mars", "Jupiter a Saturn", "vnější planety", "asteroidy a komety", "mise"],
+  "Astronomie - vesmír": ["hvězdy a jejich typy", "galaxie", "černé díry", "temná hmota", "kosmologie", "exoplanety", "mimozemský život"],
+  "Matematika": ["aritmetika", "algebra", "geometrie", "statistika a pravděpodobnost", "teorie čísel", "slavné problémy", "matematici"],
+  "Evoluce a paleontologie": ["Darwinova teorie", "evoluce člověka", "dinosauři", "pravěká megafauna", "masová vymírání", "paleontologické nálezy"],
+  "Oceánografie": ["hlubinné moře", "mořské proudy", "podmořské hory", "korálové útesy", "mořský život", "tsunami", "záhady oceánů"],
+  "Genetika a biotechnologie": ["DNA a geny", "dědičnost", "CRISPR", "GMO", "klonování", "forenzní genetika", "etika biotechnologií"],
+  "Vědecké objevy": ["Nobelovy ceny", "průlomové experimenty", "vědecké omyly", "náhodné objevy", "největší vědci", "podvody ve vědě"],
 
-  // Umění a kultura (30 témat)
-  "renesanční malířství",
-  "impresionismus a postimpresionismus",
-  "moderní a současné umění",
-  "sochařství",
-  "historická architektura",
-  "moderní architektura",
-  "světová muzea a galerie",
-  "světové památky UNESCO",
-  "české hrady a zámky",
-  "starověké divy světa",
-  "divadlo a drama",
-  "opera a balet",
-  "filmová klasika (do 1980)",
-  "moderní kinematografie",
-  "animovaný film",
-  "street art a graffiti",
-  "fotografie jako umění",
-  "asijské umění",
-  "africké umění",
-  "islámské umění a kaligrafie",
-  "art deco a art nouveau",
-  "gotická architektura",
-  "japonská kultura (ikebana, origami)",
-  "indická kultura a Bollywood",
-  "skandinávský design",
-  "móda a módní návrháři",
-  "filmové festivaly",
-  "dokumentární film",
-  "seriálová tvorba (HBO, Netflix)",
-  "videoherní průmysl",
+  // BLOK 4: TECHNOLOGIE A VYNÁLEZY (10 kategorií)
+  "Historie techniky": ["vynálezy starověku", "středověká technika", "průmyslová revoluce", "elektřina", "spalovací motory", "patenty"],
+  "Doprava - pozemní": ["automobily", "železnice", "motocykly", "hromadná doprava", "dopravní infrastruktura", "budoucnost dopravy"],
+  "Doprava - letecká a námořní": ["letadla a letectví", "lodě a námořnictví", "majáky", "černé skříňky", "slavné nehody", "kanály"],
+  "Počítače a informatika": ["historie počítačů", "hardware", "operační systémy", "programování", "databáze", "kybernetická bezpečnost", "AI"],
+  "Internet a digitální svět": ["historie internetu", "WWW", "sociální sítě", "e-commerce", "streaming", "cloud", "dark web", "kryptoměny"],
+  "Komunikační technologie": ["tisk a knihtisk", "telegraf", "telefon", "rádio", "televize", "mobilní telefony", "satelity", "5G"],
+  "Energetika": ["fosilní paliva", "jaderná energie", "vodní energie", "solární a větrná", "vodíková ekonomika", "energetické sítě"],
+  "Stavebnictví a megaprojekty": ["stavební materiály", "mrakodrapy", "mosty", "tunely", "přehrady", "stadiony", "ekologické stavby"],
+  "Kosmonautika": ["počátky kosmického průzkumu", "Apollo", "Sojuz", "ISS", "sondy do vesmíru", "Mars", "SpaceX"],
+  "Domácí technologie a DIY": ["smart home", "3D tisk", "nářadí", "renovace", "domácí bezpečnost", "úspory energie", "kuchyňské hacky"],
 
-  // Literatura (20 témat)
-  "česká literatura",
-  "světová literatura 19. století",
-  "světová literatura 20. století",
-  "antická literatura a mytologie",
-  "ruská literatura",
-  "anglická a americká literatura",
-  "francouzská literatura",
-  "poezie světová",
-  "Nobelova cena za literaturu",
-  "sci-fi a fantasy literatura",
-  "japonská literatura",
-  "latinskoamerická literatura",
-  "severská krimi literatura",
-  "africká literatura",
-  "čínská literatura",
-  "arabská literatura a Tisíc a jedna noc",
-  "beat generation",
-  "existencialismus v literatuře",
-  "dystopická literatura",
-  "komiksy a grafické romány",
+  // BLOK 5: UMĚNÍ A KULTURA (14 kategorií)
+  "Malířství": ["renesance", "baroko", "impresionismus", "expresionismus", "surrealismus", "abstrakce", "pop art", "slavné obrazy"],
+  "Sochařství a jiné výtvarné umění": ["antické sochy", "gotika", "moderní sochařství", "street art a graffiti", "keramika", "sklo", "digitální umění"],
+  "Literatura - klasická": ["antická literatura", "středověk", "renesance", "romantismus", "realismus", "modernismus", "světoví klasici"],
+  "Literatura - žánry a současnost": ["fantasy a sci-fi", "detektivky", "poezie", "drama", "komiksy", "bestsellery", "literární adaptace"],
+  "Hudba - klasická": ["baroko", "klasicismus", "romantismus", "opera", "balet", "nástroje orchestru"],
+  "Hudba - populární": ["rock and roll", "pop", "hip hop", "elektronika", "jazz", "blues", "country", "metal a punk"],
+  "Film": ["němý film", "zlatý věk Hollywoodu", "evropský film", "animovaný film", "dokumenty", "režiséři", "filmové ceny"],
+  "Televize a seriály": ["historie TV", "sitcomy", "dramatické seriály", "reality show", "kultovní seriály", "streaming platformy"],
+  "Divadlo a scénická umění": ["antické divadlo", "Shakespeare", "opera a opereta", "muzikál", "moderní drama", "improvizace", "stand-up"],
+  "Fotografie": ["historie fotografie", "techniky", "portrét", "krajina", "reportáž", "móda", "ikonické fotografie", "deepfakes"],
+  "Architektura": ["gotika", "baroko", "funkcionalismus", "brutalismus", "Art Nouveau", "Art Deco", "Bauhaus", "Gaudí"],
+  "Design": ["průmyslový design", "grafický design", "typografie", "interiérový design", "skandinávský design", "Apple estetika"],
+  "Mytologie": ["řecká", "severská", "slovanská", "egyptská", "hinduistická", "mýty o potopě", "hrdinské archetypy", "draci"],
+  "Náboženství světa": ["křesťanství", "islám", "buddhismus", "hinduismus", "judaismus", "náboženské relikvie", "sekty a kulty"],
 
-  // Hudba (20 témat)
-  "barokní hudba",
-  "klasicismus a romantismus",
-  "operní díla a skladatelé",
-  "čeští skladatelé",
-  "jazz a blues",
-  "rock historie (1950-1990)",
-  "pop a moderní hudba",
-  "hudební nástroje",
-  "filmová hudba",
-  "světoví dirigenti a orchestry",
-  "elektronická hudba",
-  "hip hop a rap",
-  "reggae a Bob Marley",
-  "world music",
-  "heavy metal",
-  "punk rock",
-  "country a folk",
-  "latina (salsa, tango)",
-  "K-pop a J-pop",
-  "africká hudba",
+  // BLOK 6: FILOZOFIE (6 kategorií)
+  "Antická filozofie": ["sokratovská metoda", "Platónův idealismus", "Aristotelova logika", "cynismus", "skepticismus", "stoicismus", "epikureismus"],
+  "Středověká a renesanční filozofie": ["scholastika", "nominalismus vs. realismus", "Avicenna", "Averroes", "humanismus"],
+  "Novověká filozofie": ["empirismus", "racionalismus", "Kantův idealismus"],
+  "Moderní filozofie": ["existencialismus", "fenomenologie", "analytická filozofie", "pragmatismus"],
+  "Etika a morální filozofie": ["deontologie", "konsekvencialismus", "utilitarismus", "ctnostní etika", "bioetika", "práva zvířat"],
+  "Metafyzika a epistemologie": ["bytí a substance", "kauzalita", "čas a prostor", "teorie poznání", "pravda", "skepticismus"],
 
-  // Sport (15 témat)
-  "letní olympijské hry",
-  "zimní olympijské hry",
-  "fotbal - MS a kluby",
-  "lední hokej",
-  "tenis",
-  "atletika a světové rekordy",
-  "formule 1 a motorsport",
-  "bojové sporty a olympijské disciplíny",
-  "cyklistika",
-  "plavání a vodní sporty",
-  "golf",
-  "rugby a kriket",
-  "extrémní sporty",
-  "esport a gaming",
-  "paralympijské hry",
+  // BLOK 7: SPOLEČNOST A HUMANITNÍ VĚDY (10 kategorií)
+  "Psychologie": ["psychoanalýza", "behaviorismus", "kognitivní psychologie", "sociální psychologie", "slavné experimenty", "fobie"],
+  "Sociologie a antropologie": ["sociální struktury", "rodina", "kultura", "migrace", "urbanizace", "rituály", "antropologické výzkumy"],
+  "Ekonomie": ["mikroekonomie", "makroekonomie", "ekonomické krize", "hospodářská politika", "ekonomické systémy", "slavní ekonomové"],
+  "Právo a spravedlnost": ["právní systémy", "ústavní právo", "trestní právo", "lidská práva", "slavné případy", "bizarní zákony"],
+  "Politologie": ["politické systémy", "demokracie", "totalitarismus", "volební systémy", "politické ideologie", "diplomacie"],
+  "Jazykověda": ["jazykové rodiny", "vymírající jazyky", "etymologie", "dialekty", "umělé jazyky", "překlad"],
+  "Média a žurnalistika": ["historie tisku", "investigativní žurnalistika", "propaganda", "dezinformace", "fake news", "mediální etika"],
+  "Rétorika a komunikace": ["argumentační fauly", "slavné projevy", "vyjednávání", "storytelling", "neverbální komunikace", "debatní techniky"],
+  "Geopolitika a mezinárodní vztahy": ["mocnosti", "geopolitika surovin", "námořní úžiny", "sankce", "mezinárodní organizace", "konflikty"],
+  "Evropská unie": ["instituce EU", "eurozóna", "Schengen", "legislativní proces", "rozšíření EU", "symboly EU"],
 
-  // Společnost a moderní témata (10 témat)
-  "technologičtí vizionáři (Jobs, Musk, Gates)",
-  "sociální sítě a influenceři",
-  "kryptoměny a blockchain",
-  "ekologická hnutí",
-  "startup kultura",
-  "slavné soudní procesy",
-  "konspirační teorie a jejich vyvracení",
-  "moderní architektura mrakodrapů",
-  "vesmírné mise 21. století",
-  "pandemie v historii"
-];
+  // BLOK 8: SPORT (8 kategorií)
+  "Olympijské hry": ["historie olympiád", "letní sporty", "zimní sporty", "rekordy", "skandály", "pořadatelská města", "symboly"],
+  "Fotbal": ["historie fotbalu", "MS a ME", "slavné kluby", "legendární hráči", "taktiky", "stadiony", "fotbalová pravidla"],
+  "Hokej a zimní sporty": ["NHL", "MS v hokeji", "krasobruslení", "lyžování", "biatlon", "skoky na lyžích", "curling", "snowboarding"],
+  "Tenis a raketové sporty": ["grandslamy", "legendy tenisu", "Davis Cup", "badminton", "stolní tenis", "squash"],
+  "Motorsport": ["Formule 1", "rally", "MotoGP", "NASCAR", "vytrvalostní závody", "slavní jezdci", "legendární tratě"],
+  "Atletika a gymnastika": ["běhy", "skoky a vrhy", "gymnastika", "světové rekordy", "dopingové skandály", "ultra sporty"],
+  "Bojové a silové sporty": ["box", "MMA/UFC", "judo", "karate", "wrestling", "vzpírání", "strongman", "šerm"],
+  "Ostatní sporty": ["basketbal/NBA", "baseball", "americký fotbal/NFL", "rugby", "golf", "cyklistika", "vodní sporty", "e-sporty"],
 
-// === 100 TÉMAT PRO ŠKOLÁKY (12-18 let) ===
-const STUDENT_TOPICS = [
-  // Historie (20 témat)
-  "české dějiny 20. století",
-  "první a druhá světová válka",
-  "starověké civilizace",
-  "středověká Evropa",
-  "doba Karla IV.",
-  "husitství a Jan Hus",
-  "národní obrození",
-  "vznik Československa",
-  "sametová revoluce",
-  "studená válka",
-  "starověký Egypt",
-  "antické Řecko a Řím",
-  "renesance",
-  "průmyslová revoluce",
-  "koloniální období",
-  "americká válka za nezávislost",
-  "francouzská revoluce",
-  "Napoleon Bonaparte",
-  "objevitelé a cestovatelé",
-  "dějiny 21. století",
+  // BLOK 9: GASTRONOMIE (8 kategorií)
+  "Světové kuchyně": ["italská", "francouzská", "asijské", "mexická", "středomořská", "blízkovýchodní", "africké", "americká"],
+  "Potraviny a suroviny": ["maso", "ryby a mořské plody", "zelenina a ovoce", "mléčné výrobky", "obiloviny", "koření", "oleje"],
+  "Kulinářské techniky": ["techniky krájení", "fermentace", "grilování", "pečení", "molekulární gastronomie", "food pairing"],
+  "Víno a vinařství": ["terroir", "odrůdy", "apelace", "degustace", "šumivá vína", "fortifikovaná vína", "vinařské regiony"],
+  "Pivo a pivovarnictví": ["lager vs. ale", "chmel a slad", "pivní styly světa", "craft revoluce", "párování s jídlem"],
+  "Destiláty a koktejly": ["whisky", "vodka", "rum", "gin", "likéry", "koktejlová kultura", "bary a mixologie"],
+  "Káva a čaj": ["odrůdy kávy", "čajové ceremonie", "kofein", "kávová kultura", "čajové rituály", "kakao"],
+  "Gastronomické fenomény": ["Michelinské hvězdy", "slavní šéfkuchaři", "street food", "fast food", "gastronomické trendy", "kulinářské soutěže"],
 
-  // Zeměpis (15 témat)
-  "hlavní města Evropy",
-  "hlavní města světa",
-  "řeky a pohoří Evropy",
-  "české hory a řeky",
-  "kontinenty a oceány",
-  "státy Evropské unie",
-  "asijské státy",
-  "africké státy",
-  "americké státy",
-  "podnebné pásy",
-  "přírodní katastrofy",
-  "národní parky ČR",
-  "světové památky UNESCO",
-  "sopky a zemětřesení",
-  "deštné pralesy a pouště",
+  // BLOK 10: ZÁBAVA A VOLNÝ ČAS (10 kategorií)
+  "Deskové hry": ["šachy", "go", "Monopoly", "strategické hry", "kooperativní hry", "karetní hry", "moderní deskovky", "D&D"],
+  "Videohry a gaming": ["historie videoher", "konzolové války", "PC gaming", "herní žánry", "legendární série", "e-sport", "easter eggs"],
+  "Hazard a sázení": ["poker", "blackjack", "ruleta", "loterie", "kasina světa", "pravděpodobnost", "slavní podvodníci"],
+  "Sběratelství": ["filatelie", "numismatika", "vinyly", "memorabilie", "veterány", "podivné sbírky"],
+  "Hádanky a logické hry": ["křížovky", "sudoku", "rébusy", "hlavolamy", "paradoxy", "escape room logika", "IQ testy"],
+  "Móda a krása": ["dějiny módy", "módní domy", "módní ikony", "kosmetika", "parfumerie", "šperky", "udržitelná móda"],
+  "Domácí mazlíčci": ["psi - plemena", "kočky - plemena", "akvarijní ryby", "exotická zvířata", "výcvik", "veterinární péče"],
+  "Zahradničení a příroda": ["pěstování rostlin", "pokojovky", "bylinky", "jedovaté rostliny", "bonsaje", "sběr hub"],
+  "Přežití v přírodě": ["rozdělávání ohně", "uzly", "orientace", "jedlé rostliny", "stavba přístřešku", "první pomoc"],
+  "Komiksy a fandomy": ["Marvel vs. DC", "manga", "evropské komiksy", "superhrdinové", "sběratelství", "fanfikce", "cosplay"],
 
-  // Přírodní vědy (20 témat)
-  "lidské tělo a orgány",
-  "buňky a tkáně",
-  "periodická tabulka prvků",
-  "chemické reakce",
-  "fyzikální zákony",
-  "elektřina a magnetismus",
-  "optika a světlo",
-  "zvuk a vlnění",
-  "sluneční soustava",
-  "hvězdy a galaxie",
-  "ekologie a životní prostředí",
-  "potravní řetězce",
-  "savci a ptáci",
-  "plazi a obojživelníci",
-  "ryby a vodní živočichové",
-  "rostliny a fotosyntéza",
-  "genetika základy",
-  "evoluce a Darwin",
-  "minerály a horniny",
-  "počasí a klima",
+  // BLOK 11: PIKANTNÍ A DOSPĚLÉ (10 kategorií)
+  "Alkohol a opojení": ["historie alkoholu", "legendární opilci", "prohibice", "absint", "alkohol v kultuře", "kocovina"],
+  "Sex, láska a vztahy": ["afrodiziaka", "historie antikoncepce", "slavné milenecké páry", "Kámasútra", "erotika v umění"],
+  "Kriminalita a podsvětí": ["sérioví vrazi", "slavné loupeže", "mafiánské klany", "vězeňský slang", "pašeráctví", "organizovaný zločin"],
+  "Drogy a psychedelika": ["opium v 19. století", "hippies éra", "vliv drog na umění", "léčebné využití", "prohibice drog"],
+  "Noční život": ["legendární kluby", "taneční styly", "rave kultura", "kabaret a burleska", "DJ kultura"],
+  "Tabák a kouření": ["kubánské doutníky", "historie kouření", "dýmkové rituály", "zákazy kouření", "tabákový průmysl"],
+  "Špionáž a tajné služby": ["Mata Hari", "KGB vs. CIA", "Enigma", "dvojití agenti", "špionážní gadgety", "slavné operace"],
+  "Kriminalistika a forenzní věda": ["DNA", "otisky prstů", "balistika", "toxikologie", "profilování", "slavné případy"],
+  "Podvody a skandály": ["Ponzi schémata", "falza umění", "účetní podvody", "hoaxy", "pyramidové hry", "finanční bubliny"],
+  "Konspirace a záhady": ["JFK", "Ilumináti", "UFO historie", "nevyřešené záhady", "Bermudský trojúhelník", "záhady historie"],
 
-  // Matematika a logika (10 témat)
-  "geometrie a tvary",
-  "zlomky a procenta",
-  "rovnice a funkce",
-  "statistika základy",
-  "pravděpodobnost",
-  "slavní matematici",
-  "matematické důkazy",
-  "čísla a jejich vlastnosti",
-  "jednotky a převody",
-  "logické úlohy",
+  // BLOK 12: KURIOZITY (8 kategorií)
+  "Guinessovy rekordy": ["tělesné modifikace", "největší sbírky", "pojídání", "vytrvalost", "hromadné akce", "kuriózní rekordy"],
+  "Darwinovy ceny": ["nejhloupější úmrtí", "selhání bezpečnosti", "hloupost zločinců", "domácí nehody"],
+  "Bizarní zákony": ["zákony v USA", "historické zákony", "zákony o zvířatech", "daňové kuriozity", "byrokratické absurdity"],
+  "Městské legendy": ["Krvavá Mary", "stopař duchů", "jídlo z potkanů", "únosy mimozemšťany", "černá sanitka"],
+  "Pověry a rituály": ["černá kočka", "pátek 13.", "rozbité zrcadlo", "svatební pověry", "pohřební rituály", "kulturní tabu"],
+  "Etymologie a jazykové kuriozity": ["původ slov", "falešní přátelé", "palindromy", "internet slang", "nadávky", "jména a jejich význam"],
+  "Slavné citáty": ["vědecké citáty", "politické", "filozofické", "filmové hlášky", "špatně připisované citáty", "poslední slova"],
+  "Symboly a vlajky": ["státní vlajky", "heraldika", "náboženské symboly", "korporátní loga", "emoji", "tajné symboly"],
 
-  // Umění a kultura (10 témat)
-  "české malířství",
-  "světové malířství",
-  "architektura slohů",
-  "české hrady a zámky",
-  "divadlo a drama",
-  "hudební nástroje",
-  "filmová tvorba",
-  "fotografování",
-  "sochařství",
-  "design a móda",
+  // BLOK 13: BUSINESS A PRÁCE (4 kategorie)
+  "Marketing a značky": ["positioning", "psychologie cenovky", "neuromarketing", "virální kampaně", "rebranding", "slogany"],
+  "Management a leadership": ["motivace týmů", "OKR/KPI", "rozhodování", "projektové metodiky", "firemní kultura", "konflikty"],
+  "Startupy a podnikání": ["business model", "fundraising", "pitch", "škálování", "fail stories", "Silicon Valley"],
+  "Pracovní trh a kariéra": ["vyhoření", "home office", "nejhůře placené práce", "bizarní povolání", "budoucnost práce"],
 
-  // Literatura (10 témat)
-  "česká literatura povinná četba",
-  "světová literatura pro mládež",
-  "antická literatura a báje",
-  "pohádky a pověsti",
-  "poezie a básníci",
-  "divadelní hry",
-  "sci-fi a fantasy",
-  "detektivky a thrillery",
-  "komiksy a manga",
-  "současná literatura pro teenagery",
+  // BLOK 14: ČESKÉ KATEGORIE (10 kategorií)
+  "Česká historie": ["Velká Morava", "Přemyslovci", "Karel IV.", "husitství", "Habsburkové", "1918", "1968", "1989"],
+  "České filmy a hlášky": ["Pelíšky", "Slunce seno", "Svěrákovy filmy", "česká nová vlna", "pohádky", "Český lev"],
+  "Česká kuchyně": ["omáčky", "knedlíky", "svíčková", "zabíjačka", "chlebíčky", "sváteční jídla", "regionální speciality"],
+  "České pivo a víno": ["pivovary", "pivní styly", "historie českého piva", "moravské víno", "vinařské regiony"],
+  "Česká hudební scéna": ["Karel Gott", "underground", "folk festivaly", "české muzikály", "legendární kapely", "Smetana a Dvořák"],
+  "Česká literatura": ["Kundera", "Hrabal", "Hašek a Švejk", "Čapek", "Neruda", "povinná četba", "literární ceny"],
+  "Čeští vynálezci a vědci": ["Wichterle", "Křižík", "Mendel", "Purkyně", "Heyrovský", "Semtex"],
+  "Český sport": ["Nagano 98", "Jágr", "Zátopek", "tenisové legendy", "fotbalová reprezentace", "olympionici"],
+  "Praha a její tajemství": ["Golem", "pražské podzemí", "mosty", "kavárny", "strašidla", "pražské legendy", "architektura"],
+  "České regiony a tradice": ["Ostravsko", "brněnský hantec", "Morava", "Šumava", "české sklo", "chataření", "houbaření"]
+};
 
-  // Hudba (5 témat)
-  "hudební žánry",
-  "čeští zpěváci a kapely",
-  "světové hudební hvězdy",
-  "dějiny populární hudby",
-  "hudební teorie základy",
+// === FLATTEN: Převod struktury na ploché pole témat ===
+// Automaticky přidává "Obecná otázka z kategorie" ke každé kategorii
+const ALL_TOPICS = Object.entries(CATEGORIES_ADULT).flatMap(([category, topics]) => [
+  ...topics.map(topic => `${category}: ${topic}`),
+  `${category}: Obecná otázka z kategorie`
+]);
 
-  // Sport (10 témat)
-  "olympijské hry",
-  "fotbal a hokej",
-  "tenis a atletika",
-  "zimní sporty",
-  "vodní sporty",
-  "bojové sporty",
-  "čeští sportovci",
-  "sportovní rekordy",
-  "paralympijské sporty",
-  "esport"
-];
+// === STRUKTUROVANÉ KATEGORIE A TÉMATA PRO STUDENTY (90 kategorií) ===
+// Zdroj: STRUKTURA_KATEGORII_A_TEMAT_STUDENTI.md
+// "Obecná otázka z kategorie" se přidává automaticky při flatten
+const CATEGORIES_STUDENT = {
+  // BLOK 1: MATEMATIKA (4 kategorie)
+  "Matematika – algebra a rovnice": ["lineární rovnice", "kvadratické rovnice", "nerovnice", "systémy rovnic", "polynomy", "exponenciální a logaritmické funkce"],
+  "Matematika – geometrie": ["trojúhelníky a kružnice", "Pythagorova věta", "podobnost a shodnost", "objemy a povrchy", "analytická geometrie", "vektory"],
+  "Matematika – goniometrie a funkce": ["sinus/kosinus/tangens", "grafy funkcí", "trigonometrické rovnice", "jednotková kružnice", "posloupnosti"],
+  "Matematika – statistika a pravděpodobnost": ["kombinatorika", "pravděpodobnost", "průměr/medián/modus", "grafy a interpretace dat", "normální rozdělení"],
 
-// === 40 TÉMAT PRO DĚTI (6-12 let) ===
-const KIDS_TOPICS = [
-  // Zvířata (10 témat)
-  "domácí mazlíčci",
-  "zvířata na farmě",
-  "zvířata v ZOO",
-  "zvířata v lese",
-  "mořská zvířata",
-  "ptáci kolem nás",
-  "hmyz a brouci",
-  "dinosauři",
-  "zvířata Afriky",
-  "zvířecí mláďata",
+  // BLOK 2: FYZIKA (4 kategorie)
+  "Fyzika – mechanika": ["Newtonovy zákony", "práce a energie", "hybnost", "tření", "pohyb v kružnici", "jednoduché stroje"],
+  "Fyzika – elektřina a magnetismus": ["Ohmův zákon", "elektrické obvody", "magnetické pole", "elektromagnetická indukce", "střídavý proud"],
+  "Fyzika – vlnění a optika": ["zvuk a frekvence", "odraz a lom světla", "čočky a zrcadla", "spektrum a barvy", "Dopplerův jev"],
+  "Fyzika – moderní fyzika": ["atomová struktura", "radioaktivita", "speciální relativita", "základy kvantové mechaniky", "jaderné reakce"],
 
-  // Příroda (8 témat)
-  "roční období",
-  "počasí a oblaka",
-  "stromy a květiny",
-  "ovoce a zelenina",
-  "planety a vesmír",
-  "hory a řeky",
-  "moře a oceány",
-  "den a noc",
+  // BLOK 3: CHEMIE (3 kategorie)
+  "Chemie – obecná": ["periodická tabulka", "chemické vazby", "reakce a rovnice", "pH a kyseliny/zásady", "oxidace a redukce", "chemie v domácnosti"],
+  "Chemie – organická": ["uhlovodíky", "alkoholy a kyseliny", "plasty a polymery", "léčiva", "izomerie"],
+  "Chemie – biochemie": ["bílkoviny", "sacharidy", "tuky", "enzymy", "vitaminy", "metabolismus"],
 
-  // Pohádky a příběhy (8 témat)
-  "české pohádky",
-  "zahraniční pohádky",
-  "Disney postavy",
-  "Pixar filmy",
-  "Harry Potter",
-  "superhrdinové",
-  "pohádkové bytosti",
-  "animované seriály",
+  // BLOK 4: BIOLOGIE (4 kategorie)
+  "Biologie – buňka a genetika": ["stavba buňky", "DNA a RNA", "dědičnost", "Mendelovy zákony", "mutace", "genetické testy"],
+  "Biologie – lidské tělo": ["oběhová soustava", "nervová soustava", "trávicí soustava", "dýchací soustava", "imunita", "smysly", "hormony"],
+  "Biologie – ekologie a evoluce": ["ekosystémy", "potravní řetězce", "biodiverzita", "Darwinova teorie", "přirozený výběr", "klimatická změna"],
+  "Biologie – botanika a zoologie": ["rostlinná stavba", "fotosyntéza", "živočišná říše", "houby", "mikroorganismy", "ohrožené druhy"],
 
-  // Člověk a tělo (4 témata)
-  "lidské tělo pro děti",
-  "smysly člověka",
-  "zdraví a hygiena",
-  "jídlo a výživa",
+  // BLOK 5: ZEMĚPIS (4 kategorie)
+  "Zeměpis – fyzický": ["stavba Země", "tektonika desek", "sopky a zemětřesení", "atmosféra", "hydrosféra", "podnebné pásy"],
+  "Zeměpis – Česko a Evropa": ["české regiony a kraje", "česká pohoří a řeky", "sousední státy", "EU a Schengen", "evropské státy"],
+  "Zeměpis – svět": ["kontinenty", "hlavní města", "časová pásma", "světové velmoci", "přírodní divy", "rekordy přírody"],
+  "Zeměpis – socioekonomický": ["světová populace", "urbanizace", "globalizace", "hospodářství", "mezinárodní organizace", "migrace"],
 
-  // Věda pro děti (5 témat)
-  "jednoduché pokusy",
-  "jak věci fungují",
-  "dopravní prostředky",
-  "vynálezy pro děti",
-  "roboti a technologie",
+  // BLOK 6: DĚJEPIS (6 kategorií)
+  "Dějepis – starověk": ["Egypt a pyramidy", "antické Řecko", "Římská říše", "Mezopotámie", "antická kultura", "mýty vs. fakta"],
+  "Dějepis – středověk": ["feudalismus", "křížové výpravy", "rytíři a hrady", "církev", "města a cechy", "morové epidemie"],
+  "Dějepis – novověk": ["zámořské objevy", "reformace", "třicetiletá válka", "osvícenství", "průmyslová revoluce", "Francouzská revoluce"],
+  "Dějepis – světové války": ["první světová válka", "meziválečné období", "druhá světová válka", "holocaust", "zbraně a technika", "život na frontě"],
+  "Dějepis – studená válka a současnost": ["bipolární svět", "Berlínská zeď", "vesmírný závod", "dekolonizace", "pád komunismu", "současné konflikty"],
+  "Dějepis – české dějiny": ["Přemyslovci", "Karel IV.", "husitství", "Habsburkové", "národní obrození", "1918", "1948", "1968", "1989"],
 
-  // Sport a hry (5 témat)
-  "sportovní hry",
-  "olympijské sporty pro děti",
-  "míčové hry",
-  "zimní sporty pro děti",
-  "pohybové hry"
-];
+  // BLOK 7: ČESKÁ LITERATURA (4 kategorie)
+  "Česká literatura – středověk a baroko": ["Kosmas", "Jan Hus", "humanismus", "baroko", "Komenský"],
+  "Česká literatura – 19. století": ["národní obrození", "Mácha a romantismus", "Němcová a realismus", "Neruda", "májovci a ruchovci"],
+  "Česká literatura – 20. století": ["Čapek", "Hašek a Švejk", "Hrabal", "Kundera", "Havel", "meziválečná literatura"],
+  "Česká literatura – poezie a drama": ["Seifert", "Halas", "Holan", "české divadlo", "absurdní drama", "současní autoři"],
+
+  // BLOK 8: SVĚTOVÁ LITERATURA (6 kategorií)
+  "Světová literatura – antika a středověk": ["Homér", "řecké drama", "Dante", "Chaucer", "Bible jako literatura"],
+  "Světová literatura – renesance a klasicismus": ["Shakespeare – tragédie", "Shakespeare – komedie", "Molière", "Cervantes"],
+  "Světová literatura – 19. století": ["romantismus", "realismus", "Dostojevskij", "Tolstoj", "Brontëovy"],
+  "Světová literatura – 20. století": ["Kafka", "Hemingway", "Orwell", "Joyce", "magický realismus"],
+  "Světová literatura – ruská a francouzská": ["Puškin", "Čechov", "Gogol", "Hugo", "Zola", "Maupassant"],
+  "Světová literatura – současná a žánrová": ["young adult", "fantasy a sci-fi", "thrillery", "komiksy a manga", "bestsellery", "Stephen King"],
+
+  // BLOK 9: ČESKÝ JAZYK A CIZÍ JAZYKY (3 kategorie)
+  "Český jazyk": ["pravopis a vyjmenovaná slova", "větná skladba", "slovní druhy", "stylistika", "vývoj jazyka", "nářečí"],
+  "Angličtina": ["gramatika a časy", "slovní zásoba", "idiomy a fráze", "britská vs. americká", "reálie USA/UK", "angličtina v popkultuře"],
+  "Cizí jazyky": ["němčina – základy", "francouzština – základy", "španělština – základy", "falešní přátelé", "jazykové rodiny"],
+
+  // BLOK 10: OBČANSKÁ NAUKA A PRÁVO (3 kategorie)
+  "Občanská nauka": ["Ústava ČR", "politický systém", "volby a demokracie", "politické ideologie", "EU a její instituce"],
+  "Právo pro život": ["lidská práva", "trestní a občanské právo", "od kolika let co můžu", "smlouvy", "pracovní právo", "autorská práva"],
+  "Filosofie a etika": ["antická filosofie", "etická dilemata", "základní směry", "slavní filosofové", "filosofie pro začátečníky"],
+
+  // BLOK 11: INFORMATIKA A TECHNOLOGIE (5 kategorií)
+  "Informatika – základy": ["hardware a software", "operační systémy", "soubory a formáty", "počítačové sítě", "cloud"],
+  "Programování": ["proměnné a podmínky", "cykly a funkce", "algoritmické myšlení", "programovací jazyky", "ladění chyb"],
+  "Kyberbezpečnost": ["hesla a 2FA", "phishing", "digitální stopa", "soukromí online", "bezpečné sdílení", "hoaxy a podvody"],
+  "Umělá inteligence a moderní tech": ["co je AI", "ChatGPT a generativní nástroje", "deepfakes", "VR a AR", "roboti", "budoucnost technologií"],
+  "Internet a sítě": ["jak funguje web", "Wi-Fi", "IP a DNS", "historie internetu", "síťová neutralita"],
+
+  // BLOK 12: DIGITÁLNÍ SVĚT A SOCIÁLNÍ SÍTĚ (4 kategorie)
+  "Sociální sítě": ["TikTok", "Instagram", "YouTube", "algoritmy a bubliny", "influenceři", "digitální wellbeing"],
+  "Memy a internetová kultura": ["původ slavných memů", "virální videa", "internetový slang", "emoji", "cancel culture"],
+  "Média a kritické myšlení": ["fake news", "fact-checking", "clickbait", "manipulace obrazem", "propaganda", "mediální gramotnost"],
+  "Digitální tvorba": ["grafický design", "video editing", "tvorba obsahu", "podcast", "fotografie", "osobní branding"],
+
+  // BLOK 13: GAMING (3 kategorie)
+  "Videohry – kompetitivní": ["League of Legends/Dota", "CS:GO a Valorant", "Fortnite", "e-sport týmy", "herní slang"],
+  "Videohry – příběhové a klasiky": ["Minecraft", "The Witcher", "GTA", "Assassin's Creed", "Nintendo klasiky", "indie hry"],
+  "Gaming kultura": ["historie konzolí", "streamování her", "herní vývojáři", "easter eggs", "speedrunning"],
+
+  // BLOK 14: FILM A SERIÁLY (4 kategorie)
+  "Filmové trháky": ["Marvel vs. DC", "Star Wars", "Harry Potter", "Rychle a zběsile", "horory"],
+  "Seriály a streaming": ["Netflix originals", "Stranger Things", "sitcomy", "true crime", "reality show"],
+  "České filmy a seriály": ["česká klasika", "česká nová vlna", "čeští režiséři a herci", "pohádky"],
+  "Film – technika a pojmy": ["filmové žánry", "Oscarové filmy", "filmové techniky", "adaptace knih", "filmové hlášky"],
+
+  // BLOK 15: HUDBA (3 kategorie)
+  "Hudba – klasická a teorie": ["hudební nástroje", "hudební pojmy", "čeští skladatelé", "světoví skladatelé", "orchestr"],
+  "Hudba – populární": ["rap a hip hop", "pop", "rock", "K-pop", "elektronika", "letní hity"],
+  "Hudba – scéna a festivaly": ["čeští interpreti", "světové hvězdy", "hudební festivaly", "hudební ceny", "historie popu"],
+
+  // BLOK 16: ANIME A MANGA (1 kategorie)
+  "Anime a manga": ["Naruto", "One Piece", "Pokémon", "Studio Ghibli", "Attack on Titan", "japonská popkultura"],
+
+  // BLOK 17: UMĚNÍ A KULTURA (3 kategorie)
+  "Výtvarné umění": ["malířské techniky", "slavné obrazy", "čeští malíři", "sochařství", "street art a graffiti"],
+  "Architektura a design": ["architektonické styly", "slavné stavby", "moderní architektura", "průmyslový design", "grafický design"],
+  "Divadlo": ["divadelní žánry", "Shakespeare na jevišti", "česká divadelní scéna", "muzikály", "improvizace"],
+
+  // BLOK 18: SPORT (4 kategorie)
+  "Populární sporty": ["fotbal", "hokej", "basketbal", "tenis", "atletika", "zimní sporty"],
+  "Olympiáda a velké akce": ["letní a zimní olympiáda", "MS ve fotbale", "MS v hokeji", "čeští sportovci", "olympijské rekordy"],
+  "Extrémní a alternativní sporty": ["skateboarding", "BMX", "parkour", "surfing", "snowboarding", "e-sport jako sport"],
+  "Sportovní kultura": ["sportovní značky", "stadiony", "doping", "transfery a peníze", "fanouškovská kultura", "sportovní pravidla"],
+
+  // BLOK 19: ZDRAVÍ A ŽIVOTNÍ STYL (4 kategorie)
+  "Zdraví a první pomoc": ["resuscitace", "co dělat při úrazu", "běžné nemoci", "prevence", "alkohol a účinky", "spánek"],
+  "Výživa a stravování": ["zdravá výživa", "makroživiny", "cukr a mýty", "pitný režim", "kofein", "etikety potravin"],
+  "Fitness a cvičení": ["posilovna", "regenerace", "prevence zranění", "strava sportovců", "trendy ve fitness"],
+  "Duševní zdraví": ["stres a jeho zvládání", "emoce", "mentální hygiena", "závislosti", "kde hledat pomoc"],
+
+  // BLOK 20: PRAKTICKÝ ŽIVOT (6 kategorií)
+  "Finanční gramotnost": ["bankovní účet", "spoření", "rozpočet", "kreditky a dluhy", "kryptoměny základy", "finanční podvody"],
+  "Práce a kariéra": ["životopis", "pohovor", "brigády", "soft skills", "profesní orientace", "networking"],
+  "Studium a vzdělávání": ["maturita", "vysoké školy v ČR", "studium v zahraničí", "efektivní učení", "gap year", "online vzdělávání"],
+  "Vztahy a komunikace": ["typy vztahů", "komunikační dovednosti", "red flags", "asertivita", "online vs. offline"],
+  "Cestování": ["cestování s rozpočtem", "evropské destinace", "cestovní dokumenty", "bezpečnost", "kulturní rozdíly"],
+  "Občanský život": ["občanský průkaz", "volby – jak volit", "řidičský průkaz", "zdravotní pojištění", "úřady"],
+
+  // BLOK 21: EKOLOGIE (1 kategorie)
+  "Ekologie a udržitelnost": ["klimatická změna", "recyklace", "uhlíková stopa", "obnovitelné zdroje", "zero waste", "greenwashing"],
+
+  // BLOK 22: MÓDA A LIFESTYLE (2 kategorie)
+  "Móda a styl": ["sneakers kultura", "streetwear značky", "udržitelná móda", "historie trendů", "subkulturní styly"],
+  "Auto-moto": ["značky aut", "tuning", "Formule 1", "motorky", "jak vyměnit kolo", "dopravní značky"],
+
+  // BLOK 23: KURIOZITY A ZÁBAVA (5 kategorií)
+  "Guinnessovy rekordy": ["bláznivé rekordy", "jídlo a pití", "zvířecí rekordy", "sportovní kuriozity", "lidské extrémy"],
+  "Záhady a konspirace": ["UFO a Area 51", "Bermudský trojúhelník", "městské legendy", "nevyřešené záhady", "paranormálno"],
+  "Věda populárně": ["jak fungují věci", "vesmírné lety", "zajímavosti o zvířatech", "optické klamy", "Nobelovy ceny"],
+  "Hlášky a citáty": ["filmové hlášky", "citáty slavných", "internetové hlášky", "přísloví", "české hlášky"],
+  "Hádanky a logika": ["logické hádanky", "IQ úlohy", "rébusy", "escape room logika", "matematické hříčky", "laterální myšlení"],
+
+  // BLOK 24: ČESKÉ ZAMĚŘENÍ (4 kategorie)
+  "Česká republika": ["kraje a regiony", "česká nej", "čeští prezidenti", "české vynálezy", "české značky"],
+  "Česká jídla a tradice": ["česká kuchyně", "vánoční tradice", "velikonoce", "svátky", "regionální speciality"],
+  "Čeští vědci a osobnosti": ["čeští vynálezci", "sportovci", "umělci", "Češi ve světě"],
+  "Studentský život v Česku": ["typy učitelů", "školní slang", "maturitní ples", "povinná četba vs. realita", "studentské tradice"]
+};
+
+// === FLATTEN: Převod struktury na ploché pole témat ===
+// Automaticky přidává "Obecná otázka z kategorie" ke každé kategorii
+const STUDENT_TOPICS = Object.entries(CATEGORIES_STUDENT).flatMap(([category, topics]) => [
+  ...topics.map(topic => `${category}: ${topic}`),
+  `${category}: Obecná otázka z kategorie`
+]);
+
+// === STRUKTUROVANÉ KATEGORIE A TÉMATA PRO DĚTI (45 kategorií) ===
+// Zdroj: STRUKTURA_KATEGORII_A_TEMAT_KIDS.md
+// "Obecná otázka z kategorie" se přidává automaticky při flatten
+const CATEGORIES_KIDS = {
+  // BLOK 1: ZVÍŘATA (8 kategorií)
+  "Domácí mazlíčci": ["psi a jejich plemena", "kočky", "křečci a morčata", "králíci", "akvarijní rybičky", "papoušci a ptáci", "péče o mazlíčky"],
+  "Zvířata na farmě": ["krávy a telata", "prasata", "ovce a kozy", "slepice a kuřata", "koně a poníci", "kachny a husy", "co nám dávají hospodářská zvířata"],
+  "Zvířata v lese": ["lesní savci", "lesní ptáci", "stopy zvířat", "noční zvířata", "jak se zvířata chrání", "zimní spánek", "les a jeho obyvatelé"],
+  "Africká a exotická zvířata": ["safari zvířata", "opice a lidoopi", "zvířata džungle", "australská zvířata", "zvířata Ameriky", "zvířata Asie", "zvířecí rekordy"],
+  "Vodní živočichové": ["delfíni a velryby", "žraloci", "ryby", "krokodýli a aligátoři", "želvy", "chobotnice a medúzy", "korálové útesy"],
+  "Ptáci": ["ptáci u krmítka", "dravci", "vodní ptáci", "exotičtí ptáci", "ptačí hnízda a vejce", "tažní ptáci", "nelétaví ptáci"],
+  "Hmyz a drobní živočichové": ["motýli", "včely a jejich důležitost", "mravenci", "brouci", "pavouci", "žáby a obojživelníci", "plazi"],
+  "Dinosauři a pravěk": ["nejznámější dinosauři", "T-Rex a masožravci", "býložraví dinosauři", "létající pravěká zvířata", "pravěká mořská stvoření", "mamuti", "fosilie a zkameněliny", "jak dinosauři vyhynuli"],
+
+  // BLOK 2: PŘÍRODA A PLANETA (5 kategorií)
+  "Stromy a rostliny": ["stromy a jejich listy", "květiny", "ovoce", "zelenina", "houby", "jak rostou rostliny", "fotosyntéza jednoduše"],
+  "Počasí a roční období": ["déšť a sníh", "bouřka a blesky", "duha", "vítr", "jaro, léto, podzim, zima", "rekordní počasí", "předpověď počasí"],
+  "Planeta Země": ["hory a pohoří", "řeky a jezera", "moře a oceány", "pouště", "ledovce a polární oblasti", "sopky", "ostrovy"],
+  "Vesmír pro děti": ["sluneční soustava", "Slunce", "Měsíc", "planety", "hvězdy", "astronauti a kosmonauti", "rakety a vesmírné lodě", "den a noc"],
+  "Ekologie pro děti": ["třídění odpadu", "šetření vodou a energií", "ohrožená zvířata", "znečištění a plasty", "stromy a kyslík", "co můžu udělat já pro přírodu", "proč chránit přírodu"],
+
+  // BLOK 3: LIDSKÉ TĚLO A ZDRAVÍ (3 kategorie)
+  "Lidské tělo": ["kostra a kosti", "srdce a krev", "mozek", "smysly", "zuby", "svaly", "trávení jídla", "jak rosteme"],
+  "Zdraví a hygiena": ["hygienické návyky", "zdravá strava", "pohyb a sport", "spánek", "nemoc a imunita", "vitamíny", "co jíst a co nejíst"],
+  "Bezpečnost a první pomoc": ["jak přejít silnici", "dopravní značky", "co dělat, když se ztratím", "bezpečnost u vody", "důležitá telefonní čísla", "požární bezpečnost", "drobná poranění", "cizí lidé a jak se chovat"],
+
+  // BLOK 4: VĚDA A TECHNIKA (5 kategorií)
+  "Jednoduchá fyzika": ["magnety", "elektřina v domácnosti", "voda a led", "světlo a stín", "zvuk", "tření", "jak věci padají"],
+  "Pokusy a experimenty": ["pokusy s vodou", "pokusy s magnety", "chemie v kuchyni", "barvení a míchání", "sopka z octa a sody", "rostlinné experimenty", "pokusy doma"],
+  "Vynálezy a objevy": ["kdo vynalezl žárovku", "historie dopravy", "telefon a jeho vývoj", "slavní vědci pro děti", "vynálezy, které změnily svět", "jednoduché stroje", "jak fungují věci"],
+  "Moderní technika": ["počítače a tablety", "části počítače", "internet a bezpečnost", "mobilní telefony", "roboti", "doprava budoucnosti", "vesmírná technika"],
+  "Doprava": ["auta", "vlaky", "letadla", "lodě", "autobusy a tramvaje", "kolo a koloběžka", "motorky"],
+
+  // BLOK 5: ČESKO A SVĚT (5 kategorií)
+  "Česká republika": ["Praha a její památky", "české hrady a zámky", "české hory a řeky", "kraje České republiky", "české tradice", "slavní Češi", "státní symboly"],
+  "Svět kolem nás": ["kontinenty", "oceány", "největší a nejmenší země", "hlavní města", "světové památky a divy", "jazyky světa", "vlajky"],
+  "Tradice a svátky": ["Vánoce", "Velikonoce", "Mikuláš", "narozeniny", "Halloween", "masopust", "tradice z celého světa"],
+  "Jak se žilo dřív": ["pravěk a lovci mamutů", "staří Egypťané", "rytíři a hrady", "jak žily děti dřív", "škola kdysi a dnes", "hračky našich prarodičů", "vynálezy, které změnily život"],
+  "Povolání": ["hasiči", "policisté", "lékaři a zdravotníci", "učitelé", "veterináři", "piloti", "kuchaři", "stavbaři"],
+
+  // BLOK 6: POHÁDKY A PŘÍBĚHY (4 kategorie)
+  "České pohádky": ["pohádkové postavy", "Večerníček", "české pohádkové filmy", "princezny a princové", "kouzelné předměty", "čeští pohádkoví autoři", "nejznámější české pohádky"],
+  "Světové pohádky": ["Popelka, Sněhurka, Červená Karkulka", "bratři Grimmové", "Hans Christian Andersen", "Pinocchio", "Petr Pan", "Kniha džunglí", "Tisíc a jedna noc"],
+  "Fantasy a dobrodružství": ["Harry Potter", "draci", "čarodějové a magie", "víly a skřítci", "rytíři a hrdinové", "bájná stvoření", "dobrodružné příběhy"],
+  "Knižní hrdinové": ["hrdinové z knih", "komiksoví hrdinové", "bajky a jejich poučení", "pověsti", "detektivky pro děti", "příběhy o zvířatech", "dobrodružství slavných postav"],
+
+  // BLOK 7: FILMY A SERIÁLY (3 kategorie)
+  "Disney a Pixar": ["Disney klasiky", "Pixar filmy", "Disney princezny", "zvířecí filmy", "pohádky od Disneyho", "oblíbené postavičky", "nové Disney filmy"],
+  "Animované seriály": ["české animované seriály", "zahraniční animáky", "kreslené postavičky", "animované filmy", "anime pro děti", "seriály z dětství rodičů", "nové oblíbené seriály"],
+  "Superhrdinové": ["Marvel hrdinové", "DC hrdinové", "superhrdinské filmy", "superhrdinské schopnosti", "záporáci", "týmy superhrdinů", "příběhy superhrdinů"],
+
+  // BLOK 8: HUDBA A UMĚNÍ (3 kategorie)
+  "Hudba pro děti": ["dětské písničky", "hudební nástroje", "hudba z pohádek", "rytmus a takt", "zvuky přírody", "zpěváci a kapely pro děti", "jak vzniká hudba"],
+  "Výtvarné umění": ["barvy a jejich míchání", "kreslení a malování", "známí malíři pro děti", "tvary v umění", "koláže a techniky", "sochařství", "optické klamy"],
+  "Tvoření a kreativita": ["modelování", "origami", "ruční práce", "pletení a háčkování", "výrobky z papíru", "recyklované tvoření", "dárky vlastní výroby"],
+
+  // BLOK 9: HRY A SPORT (4 kategorie)
+  "Sporty": ["fotbal", "hokej", "plavání", "gymnastika", "atletika", "zimní sporty", "bojové sporty", "olympijské hry"],
+  "Hry a hračky": ["stolní a karetní hry", "LEGO", "puzzle", "hry venku", "pohybové hry", "panenky a plyšáci", "stavebnice"],
+  "Videohry pro děti": ["Minecraft", "Roblox", "Pokémon", "Mario", "herní konzole", "mobilní hry", "hry s kamarády"],
+  "YouTube a internet": ["YouTubeři pro děti", "vzdělávací videa", "bezpečnost na internetu", "oblíbené kanály", "virální videa pro děti", "streaming pro děti", "co sledovat a co ne"],
+
+  // BLOK 10: ŠKOLA HROU (3 kategorie)
+  "Čeština hrou": ["abeceda", "vyjmenovaná slova", "slovní druhy", "protikladná slova", "rýmy", "přísloví a pořekadla", "jazykolamy"],
+  "Matematika hrou": ["sčítání a odčítání", "násobení", "geometrické tvary", "měření a jednotky", "čas a hodiny", "peníze a počítání", "logické úlohy"],
+  "Angličtina hrou": ["barvy anglicky", "čísla anglicky", "zvířata anglicky", "jídlo anglicky", "rodina anglicky", "základní fráze", "písničky v angličtině"],
+
+  // BLOK 11: JÍDLO (1 kategorie)
+  "Jídlo a vaření pro děti": ["ovoce a zelenina", "odkud je jídlo", "zdravá svačina", "základy v kuchyni", "tradiční česká jídla", "sladkosti a dezerty", "jídla z celého světa"],
+
+  // BLOK 12: ZAJÍMAVOSTI (1 kategorie)
+  "Zábavné Proč a kuriozity": ["proč je obloha modrá", "proč mají zebry pruhy", "odkud se bere déšť", "proč svítí hvězdy", "proč zíváme", "proč je sníh bílý", "legrační fakta o zvířatech", "neuvěřitelné rekordy"]
+};
+
+// === FLATTEN: Převod struktury na ploché pole témat ===
+// Automaticky přidává "Obecná otázka z kategorie" ke každé kategorii
+const KIDS_TOPICS = Object.entries(CATEGORIES_KIDS).flatMap(([category, topics]) => [
+  ...topics.map(topic => `${category}: ${topic}`),
+  `${category}: Obecná otázka z kategorie`
+]);
 
 export function getAgeGroups() {
   return Object.entries(AGE_GROUP_CONFIG).map(([key, config]) => ({ key, ...config }));
