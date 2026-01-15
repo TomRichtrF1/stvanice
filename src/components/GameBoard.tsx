@@ -413,6 +413,22 @@ export default function GameBoard({
                             })}
                         </div>
 
+                        {/* Perplexity fact-check odkaz */}
+                        {roundResult && currentQuestion && (
+                          <a
+                            href={`https://www.perplexity.ai/search?q=${encodeURIComponent(
+                              `${currentQuestion.question} Je správná odpověď A) ${currentQuestion.options[0]}, B) ${currentQuestion.options[1]}, nebo C) ${currentQuestion.options[2]}?`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-1 text-slate-500 hover:text-purple-400 text-xs mt-2 transition-colors"
+                          >
+                            <span>🔍</span>
+                            <span>Ověřit na Perplexity</span>
+                            <span className="text-[10px]">↗</span>
+                          </a>
+                        )}
+
                         {/* 🆕 BUG11 FIX: Tlačítko Další kolo - SKRÝT při gameOver */}
                         {roundResult && showReadyButton && !gameOver && (
                           <div className="space-y-2 mt-2">
