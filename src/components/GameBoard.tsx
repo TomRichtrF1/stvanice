@@ -268,7 +268,7 @@ export default function GameBoard({
             </div>
             
             {/* Mapa polí */}
-            <div className="flex flex-col gap-1.5 md:gap-4 flex-1 justify-center">
+            <div className="flex flex-col gap-1 md:gap-4 flex-1 justify-center">
                 {[...fields].reverse().map((fieldNum) => {
                 const isHunterHere = visualHunterPos === fieldNum;
                 const isPreyHere = visualPreyPos === fieldNum;
@@ -289,10 +289,10 @@ export default function GameBoard({
                 if (isPreyHere) bgStyle = 'bg-gradient-to-r from-green-900/50 to-slate-800 border-green-500/40';
 
                 return (
-                    <div key={fieldNum} className={`relative px-4 rounded-xl border transition-all duration-300 flex items-center justify-between ${bgStyle} 
-                        min-h-[3rem] md:min-h-[5rem] py-2
+                    <div key={fieldNum} className={`relative px-2 md:px-4 rounded-xl border transition-all duration-300 flex items-center justify-between ${bgStyle}
+                        min-h-[2rem] md:min-h-[5rem] py-1 md:py-2
                     `}>
-                        <span className={`font-mono font-bold text-sm md:text-2xl ${
+                        <span className={`font-mono font-bold text-xs md:text-2xl ${
                             isStart ? 'text-red-500 tracking-widest' : isFinish ? 'text-green-500 tracking-widest' : 'text-slate-500'
                         }`}>
                             {isStart ? 'START' : isFinish ? 'CÍL' : fieldNum}
@@ -300,15 +300,15 @@ export default function GameBoard({
                         
                         <div className="flex gap-2">
                             {isHunterHere && (
-                                <div className="flex items-center gap-1.5 bg-red-600 text-white px-2 py-1 md:px-4 md:py-2 rounded-lg shadow-lg animate-bounce z-10 transition-all duration-500">
-                                    <Skull size={14} className="md:w-6 md:h-6" />
-                                    <span className="text-[10px] md:text-sm font-bold uppercase">Lovec</span>
+                                <div className="flex items-center gap-1 md:gap-1.5 bg-red-600 text-white px-1.5 py-0.5 md:px-4 md:py-2 rounded-lg shadow-lg animate-bounce z-10 transition-all duration-500">
+                                    <Skull size={12} className="md:w-6 md:h-6" />
+                                    <span className="text-[8px] md:text-sm font-bold uppercase">Lovec</span>
                                 </div>
                             )}
                             {isPreyHere && (
-                                <div className="flex items-center gap-1.5 bg-green-600 text-white px-2 py-1 md:px-4 md:py-2 rounded-lg shadow-lg animate-pulse z-10 transition-all duration-500">
-                                    <User size={14} className="md:w-6 md:h-6"/>
-                                    <span className="text-[10px] md:text-sm font-bold uppercase">Štvanec</span>
+                                <div className="flex items-center gap-1 md:gap-1.5 bg-green-600 text-white px-1.5 py-0.5 md:px-4 md:py-2 rounded-lg shadow-lg animate-pulse z-10 transition-all duration-500">
+                                    <User size={12} className="md:w-6 md:h-6"/>
+                                    <span className="text-[8px] md:text-sm font-bold uppercase">Štvanec</span>
                                 </div>
                             )}
                             {isFinish && !isPreyHere && <Flag className="text-slate-700 w-4 h-4 md:w-6 md:h-6"/>}
